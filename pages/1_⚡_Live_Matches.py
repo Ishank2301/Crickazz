@@ -12,21 +12,40 @@ st.title("⚡ Live Match Center & Cricbuzz API")
 st.markdown("Real-time match updates fetched via Cricbuzz REST API and synchronized with local database analytics.")
 
 # API Settings Sidebar Expander
-with st.sidebar.expander("🔑 Cricbuzz RapidAPI Configuration", expanded=False):
-    api_key_input = st.text_input("RapidAPI Key (Optional)", type="password", placeholder="Enter x-rapidapi-key")
-    if st.button("Save & Test Connection"):
-        if api_key_input:
-            st.session_state["rapidapi_key"] = api_key_input
-            res = fetch_live_matches(api_key_input)
-            if "error" not in res:
-                st.success("✅ Connected to RapidAPI Cricbuzz successfully!")
+with st.sidebar.expander("🔑 Cricbuzz RapidAPI Configuration", expanded=True):
+    st.markdown("""
+    **To stream 100% live cricket matches:**
+    1. Sign up on [RapidAPI Cricbuzz API](https://rapidapi.com/cricketapi-cricketapi-default/api/cricbuzz-cricket) (Free tier available).
+    2. Copy your `x-rapidapi-key`.
+    3. Paste it below or save it as `RAPIDAPI_KEY` in your `.env` file.
+    """)
+    api_key_input = st.text_input("RapidAPI Key", type="password", placeholder="Enter x-rapidapi-key", value=st.session_state.get("rapidapi_key", ""))
+    col_save, col_clear = st.columns(2)
+    with col_save:
+        if st.button("Apply & Test Key"):
+            if api_key_input:
+                st.session_state["rapidapi_key"] = api_key_input
+                res = fetch_live_matches(api_key_input)
+                if res.get("_source") == "live_api":
+                    st.success("✅ Connected to Cricbuzz REST API!")
+                else:
+                    st.warning(f"Connection notice: {res.get('_message', 'Fallback used')}")
             else:
-                st.warning(f"Notice: {res.get('error')}")
-        else:
-            st.info("Using pre-seeded authentic tournament matches.")
+                st.session_state["rapidapi_key"] = ""
+                st.info("Reverted to offline pre-seeded matches.")
+    with col_clear:
+        if st.button("Reset to Demo"):
+            st.session_state["rapidapi_key"] = ""
+            st.rerun()
 
 active_key = st.session_state.get("rapidapi_key", None)
 matches_data = fetch_live_matches(active_key)
+data_source = matches_data.get("_source", "cached")
+
+if data_source == "live_api":
+    st.success("🟢 **LIVE CRICBUZZ API CONNECTED**: Streaming real-time live matches from `https://cricbuzz-cricket.p.rapidapi.com`.")
+else:
+    st.info("🟡 **PRE-SEEDED AUTHENTIC DATA MODE**: Showing authentic tournament matches. To stream current real-time live matches right now, enter your free [Cricbuzz RapidAPI key](https://rapidapi.com/cricketapi-cricketapi-default/api/cricbuzz-cricket) in the sidebar.")
 
 st.subheader("🔴 Ongoing & Featured Matches")
 
