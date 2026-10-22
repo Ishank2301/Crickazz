@@ -1,0 +1,86 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Primitive validation helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Connection testing doc
+    match /test/{docId} {
+      allow get: if true;
+    }
+
+    // User profile document
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow create: if isOwner(userId) && isValidId(userId)
+        && incoming().userId == userId
+        && incoming().email is string
+        && incoming().email.size() <= 256;
+      allow update: if isOwner(userId) && isValidId(userId)
+        && incoming().userId == userId
+        && incoming().email == existing().email
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'favoriteTeam']);
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      // User saved queries subcollection
+      match /saved_queries/{queryId} {
+        allow get, list: if isOwner(userId) && isValidId(userId);
+        allow create: if isOwner(userId) && isValidId(userId) && isValidId(queryId)
+          && incoming().userId == userId
+          && incoming().title is string && incoming().title.size() <= 120
+          && incoming().sql is string && incoming().sql.size() <= 2048;
+        allow update: if isOwner(userId) && isValidId(userId) && isValidId(queryId)
+          && incoming().userId == userId
+          && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'sql', 'difficulty', 'description']);
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(queryId);
+      }
+
+      // User match notes subcollection
+      match /match_notes/{noteId} {
+        allow get, list: if isOwner(userId) && isValidId(userId);
+        allow create: if isOwner(userId) && isValidId(userId) && isValidId(noteId)
+          && incoming().userId == userId
+          && incoming().matchId is string && incoming().matchId.size() <= 64
+          && incoming().note is string && incoming().note.size() <= 2000;
+        allow update: if isOwner(userId) && isValidId(userId) && isValidId(noteId)
+          && incoming().userId == userId
+          && incoming().matchId == existing().matchId
+          && incoming().diff(existing()).affectedKeys().hasOnly(['note', 'playerMention', 'updatedAt']);
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(noteId);
+      }
+
+      // User favorite players subcollection
+      match /favorite_players/{favoriteId} {
+        allow get, list: if isOwner(userId) && isValidId(userId);
+        allow create: if isOwner(userId) && isValidId(userId) && isValidId(favoriteId)
+          && incoming().userId == userId
+          && incoming().playerId is string && incoming().playerId.size() <= 64
+          && incoming().playerName is string && incoming().playerName.size() <= 128;
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(favoriteId);
+      }
+    }
+  }
+}
