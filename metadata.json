@@ -1,0 +1,8 @@
+{
+  "name": "Cricbuzz LiveStats: Real-Time Cricket Insights & SQL-Based Analytics",
+  "description": "Comprehensive sports analytics dashboard integrating live Cricbuzz match updates, interactive player statistics, in-browser SQLite database with 25 SQL practice queries, and full CRUD data management.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
