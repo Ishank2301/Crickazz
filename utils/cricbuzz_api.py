@@ -25,11 +25,14 @@ def get_api_headers(api_key: Optional[str] = None) -> Dict[str, str]:
 def fetch_live_matches(api_key: Optional[str] = None) -> Dict[str, Any]:
     """
     Fetch ongoing live matches from Cricbuzz REST API.
-    Returns parsed JSON dictionary or fallback cached records.
+    Returns parsed JSON dictionary with source indicator ('live_api' or 'cached').
     """
     key = api_key or os.getenv("RAPIDAPI_KEY", "")
     if not key:
-        return get_cached_live_matches()
+        cached = get_cached_live_matches()
+        cached["_source"] = "cached"
+        cached["_message"] = "No RAPIDAPI_KEY detected. Displaying pre-seeded tournament match data."
+        return cached
 
     url = f"{BASE_URL}/matches/v1/live"
     headers = get_api_headers(key)
@@ -37,10 +40,17 @@ def fetch_live_matches(api_key: Optional[str] = None) -> Dict[str, Any]:
     try:
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
-        return response.json()
+        data = response.json()
+        data["_source"] = "live_api"
+        data["_message"] = "Successfully streaming live real-time matches from Cricbuzz REST API."
+        return data
     except requests.RequestException as e:
-        print(f"Notice: Failed to fetch live matches from API ({e}), falling back to cached data.")
-        return get_cached_live_matches()
+        print(f"Notice: Failed to fetch live matches from Cricbuzz API ({e}), falling back to cached data.")
+        cached = get_cached_live_matches()
+        cached["_source"] = "cached"
+        cached["_error"] = str(e)
+        cached["_message"] = f"Cricbuzz API error: {e}. Falling back to cached data."
+        return cached
 
 
 def fetch_match_scorecard(match_id: int, api_key: Optional[str] = None) -> Dict[str, Any]:
