@@ -1,4 +1,5 @@
 import initSqlJs, { Database } from 'sql.js';
+import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 
 let dbInstance: Database | null = null;
 let initPromise: Promise<Database> | null = null;
@@ -10,28 +11,52 @@ export interface QueryResult {
   rowCount: number;
 }
 
+async function fetchValidWasmBinary(): Promise<ArrayBuffer> {
+  const candidateUrls = [
+    sqlWasmUrl,
+    '/sql-wasm.wasm',
+    'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.12.0/sql-wasm.wasm',
+    'https://cdn.jsdelivr.net/npm/sql.js@1.12.0/dist/sql-wasm.wasm',
+    'https://unpkg.com/sql.js@1.12.0/dist/sql-wasm.wasm',
+  ];
+
+  for (const url of candidateUrls) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        const buf = await res.arrayBuffer();
+        if (buf && buf.byteLength > 1000) {
+          const magic = new Uint8Array(buf.slice(0, 4));
+          // 0x00 0x61 0x73 0x6d === '\0asm'
+          if (magic[0] === 0x00 && magic[1] === 0x61 && magic[2] === 0x73 && magic[3] === 0x6d) {
+            return buf;
+          }
+        }
+      }
+    } catch (e) {
+      // try next fallback URL
+    }
+  }
+
+  throw new Error('Failed to retrieve a valid SQLite WebAssembly binary.');
+}
+
 export async function getDatabase(): Promise<Database> {
   if (dbInstance) return dbInstance;
   if (initPromise) return initPromise;
 
   initPromise = (async () => {
     try {
-      const SQL = await initSqlJs({
-        locateFile: (file) => `/${file}`,
-      });
+      const wasmBinary = await fetchValidWasmBinary();
+      const SQL = await initSqlJs({ wasmBinary });
       const db = new SQL.Database();
       seedDatabase(db);
       dbInstance = db;
       return db;
-    } catch (err) {
-      console.error('Failed to initialize in-browser SQLite with local wasm, trying CDN fallback...', err);
-      const SQL = await initSqlJs({
-        locateFile: (file) => `https://sql.js.org/dist/${file}`,
-      });
-      const db = new SQL.Database();
-      seedDatabase(db);
-      dbInstance = db;
-      return db;
+    } catch (err: any) {
+      console.error('Fatal SQLite initialization error:', err);
+      initPromise = null;
+      throw err;
     }
   })();
 
