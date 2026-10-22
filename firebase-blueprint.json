@@ -1,0 +1,78 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with cricket analytics preferences",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 256 },
+        "displayName": { "type": "string", "maxLength": 128 },
+        "photoURL": { "type": "string", "maxLength": 512 },
+        "favoriteTeam": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "email"]
+    },
+    "SavedQuery": {
+      "title": "SavedQuery",
+      "description": "Custom or bookmarked SQL queries saved by the user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 120 },
+        "sql": { "type": "string", "maxLength": 2048 },
+        "difficulty": { "type": "string", "maxLength": 32 },
+        "description": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "sql"]
+    },
+    "MatchNote": {
+      "title": "MatchNote",
+      "description": "User notes and commentary on live or past cricket matches",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "matchId": { "type": "string", "maxLength": 64 },
+        "note": { "type": "string", "maxLength": 2000 },
+        "playerMention": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "matchId", "note"]
+    },
+    "FavoritePlayer": {
+      "title": "FavoritePlayer",
+      "description": "Cricket player bookmarked by the user for stat tracking",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "playerId": { "type": "string", "maxLength": 64 },
+        "playerName": { "type": "string", "maxLength": 128 },
+        "team": { "type": "string", "maxLength": 64 },
+        "role": { "type": "string", "maxLength": 64 },
+        "addedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "playerId", "playerName"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile document isolated per user"
+    },
+    "/users/{userId}/saved_queries/{queryId}": {
+      "schema": { "$ref": "#/entities/SavedQuery" },
+      "description": "Saved SQL practice queries created by the user"
+    },
+    "/users/{userId}/match_notes/{noteId}": {
+      "schema": { "$ref": "#/entities/MatchNote" },
+      "description": "Match commentary and analyst notes written by the user"
+    },
+    "/users/{userId}/favorite_players/{favoriteId}": {
+      "schema": { "$ref": "#/entities/FavoritePlayer" },
+      "description": "Favorite cricket players tracked by the user"
+    }
+  }
+}
