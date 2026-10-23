@@ -9,19 +9,25 @@ function cricketBackendPlugin(): Plugin {
   return {
     name: 'cricket-backend-plugin',
     configureServer(server) {
-      // 1. Explicitly serve sql-wasm.wasm with application/wasm to prevent HTML fallback
-      server.middlewares.use('/sql-wasm.wasm', (req, res, next) => {
-        const possiblePaths = [
-          path.resolve('public/sql-wasm.wasm'),
-          path.resolve('node_modules/sql.js/dist/sql-wasm.wasm'),
-        ];
-        for (const p of possiblePaths) {
-          if (fs.existsSync(p)) {
-            res.statusCode = 200;
-            res.setHeader('Content-Type', 'application/wasm');
-            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-            fs.createReadStream(p).pipe(res);
-            return;
+      // 1. Explicitly serve any .wasm file with application/wasm to prevent HTML fallback
+      server.middlewares.use((req, res, next) => {
+        if (req.url && req.url.includes('.wasm')) {
+          const cleanUrl = req.url.split('?')[0];
+          const fileName = path.basename(cleanUrl);
+          const possiblePaths = [
+            path.resolve('public', fileName),
+            path.resolve('node_modules/sql.js/dist', fileName),
+            path.resolve('public/sql-wasm.wasm'),
+            path.resolve('node_modules/sql.js/dist/sql-wasm.wasm'),
+          ];
+          for (const p of possiblePaths) {
+            if (fs.existsSync(p)) {
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/wasm');
+              res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+              fs.createReadStream(p).pipe(res);
+              return;
+            }
           }
         }
         next();
