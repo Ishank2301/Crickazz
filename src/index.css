@@ -6,6 +6,7 @@
     background-color: #0b0f19;
     color: #f1f5f9;
     letter-spacing: -0.01em;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 
   h1, h2, h3, .font-display {
@@ -24,6 +25,93 @@
   }
 }
 
+/* ==========================================================================
+   Emerald High-Contrast Green Theme (Cricket Stadium Turf Aesthetic)
+   ========================================================================== */
+
+html[data-theme="emerald"] {
+  color-scheme: dark;
+}
+
+html[data-theme="emerald"] body {
+  background-color: #021a10 !important;
+  color: #f0fdf4 !important;
+}
+
+/* Background overrides in Emerald Mode */
+html[data-theme="emerald"] .bg-slate-950 {
+  background-color: #021a10 !important;
+}
+
+html[data-theme="emerald"] .bg-\[\#0b0f19\],
+html[data-theme="emerald"] .bg-\[\#0b0f19\]\/95,
+html[data-theme="emerald"] .bg-\[\#0b0f19\]\/90 {
+  background-color: #032316 !important;
+}
+
+html[data-theme="emerald"] .bg-\[\#070b13\] {
+  background-color: #032014 !important;
+}
+
+html[data-theme="emerald"] .bg-\[\#111827\],
+html[data-theme="emerald"] .bg-slate-900 {
+  background-color: #06331f !important;
+}
+
+html[data-theme="emerald"] .bg-slate-900\/90,
+html[data-theme="emerald"] .bg-slate-900\/80,
+html[data-theme="emerald"] .bg-slate-900\/40 {
+  background-color: rgba(6, 51, 31, 0.9) !important;
+}
+
+html[data-theme="emerald"] .bg-slate-850,
+html[data-theme="emerald"] .hover\:bg-slate-850:hover,
+html[data-theme="emerald"] .hover\:bg-slate-900:hover {
+  background-color: #09472b !important;
+}
+
+html[data-theme="emerald"] .hover\:bg-slate-800:hover {
+  background-color: #0d5c38 !important;
+}
+
+/* Border overrides in Emerald Mode */
+html[data-theme="emerald"] .border-slate-800,
+html[data-theme="emerald"] .border-slate-800\/80,
+html[data-theme="emerald"] .border-slate-800\/70,
+html[data-theme="emerald"] .border-slate-800\/60,
+html[data-theme="emerald"] .border-slate-900 {
+  border-color: #0f6a43 !important;
+}
+
+html[data-theme="emerald"] .border-slate-700 {
+  border-color: #168a57 !important;
+}
+
+/* Typography / Text colors in Emerald Mode */
+html[data-theme="emerald"] .text-slate-400 {
+  color: #86efac !important;
+}
+
+html[data-theme="emerald"] .text-slate-300 {
+  color: #bbf7d0 !important;
+}
+
+html[data-theme="emerald"] .text-slate-200 {
+  color: #dcfce7 !important;
+}
+
+html[data-theme="emerald"] .text-slate-100 {
+  color: #ffffff !important;
+}
+
+html[data-theme="emerald"] .text-slate-500 {
+  color: #4ade80 !important;
+}
+
+html[data-theme="emerald"] .text-slate-600 {
+  color: #22c55e !important;
+}
+
 /* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 5px;
@@ -34,11 +122,23 @@
   background: #0b0f19;
 }
 
+html[data-theme="emerald"] ::-webkit-scrollbar-track {
+  background: #021a10;
+}
+
 ::-webkit-scrollbar-thumb {
   background: #1f293d;
   border-radius: 4px;
 }
 
+html[data-theme="emerald"] ::-webkit-scrollbar-thumb {
+  background: #0f6a43;
+}
+
 ::-webkit-scrollbar-thumb:hover {
   background: #334155;
+}
+
+html[data-theme="emerald"] ::-webkit-scrollbar-thumb:hover {
+  background: #10b981;
 }
