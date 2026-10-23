@@ -4,8 +4,10 @@ Multi-page Streamlit Application Entry Point
 """
 
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 from utils.db_connection import get_connection, run_query, get_table_names
+from utils.threejs_stadium import get_threejs_pitch_html
 
 # Configure page settings
 st.set_page_config(
@@ -77,8 +79,8 @@ with col4:
 st.markdown("---")
 
 # Main Content Tabs
-tab_overview, tab_architecture, tab_use_cases, tab_db_status = st.tabs(
-    ["📌 Project Overview", "🏛️ Relational Database Schema", "💼 Business Use Cases", "🗄️ Database Live Status"]
+tab_overview, tab_3d, tab_architecture, tab_use_cases, tab_db_status = st.tabs(
+    ["📌 Project Overview", "🎯 3D Hawkeye Stadium", "🏛️ Relational Database Schema", "💼 Business Use Cases", "🗄️ Database Live Status"]
 )
 
 with tab_overview:
@@ -97,13 +99,21 @@ with tab_overview:
     st.subheader("🚀 Multi-Page Application Guide")
     st.markdown(
         """
-        Use the **Sidebar Navigation** on the left to explore all four functional modules:
+        Use the **Sidebar Navigation** on the left to explore all functional modules:
         1. **`1_⚡_Live_Matches.py`**: Real-time scorecards, Cricbuzz API configuration, live simulator, and win probabilities.
         2. **`2_📊_Top_Player_Stats.py`**: Career leaderboards (most runs, wickets, strike rate) and head-to-head player comparison.
         3. **`3_🔍_SQL_Analytics.py`**: The 25 SQL practice questions workbook with live query execution, result tables, and CSV export.
         4. **`4_🛠️_CRUD_Operations.py`**: Form-based data administration to insert, update, or remove records.
+        5. **`5_🎯_3D_Hawkeye_Stadium.py`**: Interactive WebGL 3D pitch, ball trajectory physics, and Preset Camera Views.
         """
     )
+
+with tab_3d:
+    st.subheader("🎯 Interactive 3D Stadium & Hawkeye Physics Viewport")
+    st.markdown(
+        "Interactive WebGL physics viewport featuring **Preset Camera Views**: **Bird's Eye**, **Bowler's End**, and **Umpire View**."
+    )
+    components.html(get_threejs_pitch_html(), height=620, scrolling=False)
 
 with tab_architecture:
     st.subheader("🏛️ Entity-Relationship Architecture (8 Normalized Tables)")
