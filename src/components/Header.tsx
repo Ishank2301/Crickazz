@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Volume2, VolumeX, Terminal, LogIn, LogOut } from 'lucide-react';
+import { Volume2, VolumeX, Terminal, LogIn, LogOut, Palette } from 'lucide-react';
 import { sounds } from '../utils/audio';
 import { auth, signInWithGoogle, logOut, subscribeToAuth } from '../services/firebase';
 import { User } from 'firebase/auth';
+import { ThemeMode, getStoredTheme, applyTheme } from '../utils/theme';
 
 interface HeaderProps {
   activeTab: string;
@@ -19,13 +20,33 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(auth.currentUser);
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [theme, setTheme] = useState<ThemeMode>(getStoredTheme);
 
   useEffect(() => {
     const unsubscribe = subscribeToAuth((user) => {
       setCurrentUser(user);
     });
-    return () => unsubscribe();
+
+    const handleThemeChange = (e: Event) => {
+      const customEvent = e as CustomEvent<{ theme: ThemeMode }>;
+      if (customEvent.detail?.theme) {
+        setTheme(customEvent.detail.theme);
+      }
+    };
+    window.addEventListener('themechange', handleThemeChange);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('themechange', handleThemeChange);
+    };
   }, []);
+
+  const toggleTheme = () => {
+    const nextTheme: ThemeMode = theme === 'slate' ? 'emerald' : 'slate';
+    setTheme(nextTheme);
+    applyTheme(nextTheme);
+    sounds.playClick();
+  };
 
   const handleAuthAction = async () => {
     if (currentUser) {
@@ -106,6 +127,28 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Zone 3: Primary action & User account */}
           <div className="flex items-center gap-3 shrink-0">
+            {/* Theme Toggle: Slate Dark vs Emerald High-Contrast Green */}
+            <button
+              onClick={toggleTheme}
+              title={
+                theme === 'slate'
+                  ? 'Switch to Emerald High-Contrast Green Theme'
+                  : 'Switch to Slate Dark Mode'
+              }
+              aria-label={`Current theme is ${theme}. Click to switch theme`}
+              className="px-2.5 py-1.5 rounded-md bg-slate-900 hover:bg-slate-850 text-slate-300 hover:text-white border border-slate-800 transition text-xs font-medium flex items-center gap-1.5 shadow-sm"
+            >
+              <Palette className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span className="hidden sm:inline capitalize">{theme}</span>
+              <span
+                className={`w-2 h-2 rounded-full transition-all ${
+                  theme === 'emerald'
+                    ? 'bg-emerald-400 ring-2 ring-emerald-500/40 shadow-[0_0_8px_rgba(52,211,153,0.7)]'
+                    : 'bg-slate-400'
+                }`}
+              />
+            </button>
+
             {/* Audio Toggle */}
             <button
               onClick={toggleSound}
