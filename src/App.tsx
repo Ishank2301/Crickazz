@@ -6,11 +6,13 @@ import { LiveMatchPage } from './components/LiveMatchPage';
 import { PlayerStatsPage } from './components/PlayerStatsPage';
 import { SqlAnalyticsPage } from './components/SqlAnalyticsPage';
 import { CrudAdminPage } from './components/CrudAdminPage';
+import { DiagnosticsPage } from './components/DiagnosticsPage';
 import { CricketPitch3D } from './components/CricketPitch3D';
 import { INITIAL_MATCHES } from './data/mockCricketData';
 import { Match } from './types/cricket';
-import { Sparkles, Eye, Target, Compass, Layers } from 'lucide-react';
+import { Sparkles, Eye, Target, Compass, Layers, Activity } from 'lucide-react';
 import { sounds } from './utils/audio';
+import { warmupDatabase } from './services/db';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<string>('home');
@@ -26,6 +28,13 @@ export function App() {
     setMatches(INITIAL_MATCHES);
     setSelectedMatchId(INITIAL_MATCHES[0].id);
   };
+
+  // Eager pre-warm of SQLite WASM and analytical engine
+  React.useEffect(() => {
+    warmupDatabase().catch((err) => {
+      console.warn('Eager warmup note:', err);
+    });
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
@@ -126,6 +135,7 @@ export function App() {
         {activeTab === 'players' && <PlayerStatsPage />}
         {activeTab === 'analytics' && <SqlAnalyticsPage />}
         {activeTab === 'crud' && <CrudAdminPage />}
+        {activeTab === 'diagnostics' && <DiagnosticsPage />}
       </main>
 
       {/* Clean Footer */}
@@ -149,6 +159,9 @@ export function App() {
             </button>
             <button onClick={() => setActiveTab('crud')} className="hover:text-emerald-400 transition-colors">
               Database CRUD
+            </button>
+            <button onClick={() => setActiveTab('diagnostics')} className="hover:text-emerald-400 transition-colors">
+              Diagnostics
             </button>
             <button onClick={() => setActiveTab('home')} className="hover:text-emerald-400 transition-colors">
               Documentation
