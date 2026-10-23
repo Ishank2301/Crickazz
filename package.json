@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "lint": "tsc --noEmit",
     "test": "tsx tests/run-all-tests.ts",
+    "start": "tsx server.ts",
     "preview": "vite preview --port 3000"
   },
   "dependencies": {
@@ -17,6 +18,7 @@
     "lucide-react": "^1.16.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "recharts": "^3.10.1",
     "sql.js": "^1.15.1",
     "tailwind-merge": "^3.0.2",
     "three": "^0.186.1"
