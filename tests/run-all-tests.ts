@@ -2,6 +2,7 @@ import { runSqliteWasmTests } from './sqlite-wasm.test';
 import { runLatencyBenchmarkTests } from './latency-benchmarks.test';
 import { runThreeJsPitchTests } from './threejs-pitch.test';
 import { runCricbuzzApiTests } from './cricbuzz-api.test';
+import { runThemeTests } from './theme.test';
 
 async function main() {
   console.log('\n===============================================================');
@@ -36,6 +37,7 @@ async function main() {
   await runCategory('Latency Benchmarks & Query Memoization', runLatencyBenchmarkTests);
   await runCategory('Three.js 3D Pitch & PCFShadowMap Compliance', runThreeJsPitchTests);
   await runCategory('Cricbuzz Live API & Fallback Contracts', runCricbuzzApiTests);
+  await runCategory('Theme System & LocalStorage Persistence', runThemeTests);
 
   const totalDuration = (performance.now() - suiteStart).toFixed(2);
   console.log('\n===============================================================');
