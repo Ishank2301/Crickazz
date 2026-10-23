@@ -1,363 +1,142 @@
-# Cricbuzz LiveStats Deployment Guide
+# Cricbuzz LiveStats: Dual-Format Deployment Guide
 
-A step-by-step deployment guide for **Cricbuzz LiveStats: Real-Time Cricket Insights & SQL-Based Analytics**.
+A deployment guide for **Cricbuzz LiveStats: Real-Time Cricket Insights & SQL-Based Analytics**.
 
-This guide covers:
-- System prerequisites and installing dependencies
-- Setting up environment variables (local, staging, and production)
-- Building the project with Vite and TypeScript
-- Deploying to Edge/Cloud platforms (**Vercel**, **Netlify**, **Docker**, **Google Cloud Run**, and **Linux VPS**)
-- Serving SQLite WebAssembly (`.wasm`) binaries with mandatory `application/wasm` MIME types
-- Post-deployment verification and troubleshooting
+This repository is architected for **dual-format deployment**:
+1. **Enterprise Full-Stack Track**: React 19 + TypeScript + Vite + Three.js 3D Stadium + SQLite WASM + Node.js (Production Server on Port `3000`)
+2. **Python Streamlit Analytics Track**: Streamlit Multi-Page App + SQLite + Pandas + Three.js WebGL Hawkeye Component (Production Server on Port `8501`)
+
+---
+
+## ⚡ Deployment Matrix
+
+| Track | Tech Stack | Production Port | Primary Deployment Platforms | Command |
+|---|---|---|---|---|
+| **Track A: Enterprise Web** | React 19, TypeScript, Three.js, SQLite WASM, Node.js | `3000` | Docker, Cloud Run, Vercel, Netlify, VPS | `npm run build && npm start` |
+| **Track B: Python Streamlit** | Python 3.11, Streamlit, Pandas, Plotly | `8501` | Streamlit Community Cloud, Docker, Cloud Run, VPS | `streamlit run main.py` |
 
 ---
 
 ## 📋 Table of Contents
 
 1. [Prerequisites](#1-prerequisites)
-2. [Installing Dependencies](#2-installing-dependencies)
-3. [Environment Variables Setup](#3-environment-variables-setup)
-4. [Building the Project with Vite](#4-building-the-project-with-vite)
-5. [Local Production Preview](#5-local-production-preview)
-6. [Deploying to Vercel](#6-deploying-to-vercel)
-7. [Deploying to Netlify](#7-deploying-to-netlify)
-8. [Deploying with Docker](#8-deploying-with-docker)
-9. [Deploying to Google Cloud Run](#9-deploying-to-google-cloud-run)
-10. [Deploying to Linux / VPS with PM2 & Nginx](#10-deploying-to-linux--vps-with-pm2--nginx)
-11. [WASM & Routing Architecture](#11-wasm--routing-architecture)
-12. [Troubleshooting Common Issues](#12-troubleshooting-common-issues)
+2. [Track A: Enterprise React / TypeScript / Node.js Deployment](#2-track-a-enterprise-react--typescript--nodejs-deployment)
+   - [Dependency Installation & Building](#dependency-installation--building)
+   - [Deploying to Vercel](#deploying-to-vercel)
+   - [Deploying to Netlify](#deploying-to-netlify)
+   - [Containerized Docker Deployment](#containerized-docker-deployment)
+   - [Deploying to Google Cloud Run](#deploying-to-google-cloud-run)
+   - [Linux VPS with PM2 & Nginx](#linux-vps-with-pm2--nginx)
+3. [Track B: Python Streamlit Application Deployment](#3-track-b-python-streamlit-application-deployment)
+   - [Local Environment Setup](#local-environment-setup)
+   - [Deploying to Streamlit Community Cloud](#deploying-to-streamlit-community-cloud)
+   - [Containerized Streamlit with Docker](#containerized-streamlit-with-docker)
+   - [Deploying Streamlit to Cloud Run](#deploying-streamlit-to-cloud-run)
+4. [3D Hawkeye Stadium & Preset Camera Views Architecture](#4-3d-hawkeye-stadium--preset-camera-views-architecture)
+5. [Environment Variables Reference](#5-environment-variables-reference)
+6. [Post-Deployment Health Checks & Troubleshooting](#6-post-deployment-health-checks--troubleshooting)
 
 ---
 
 ## 1. Prerequisites
 
-Before building or deploying, ensure the target environment meets the following specifications:
-
-- **Node.js**: Version `18.x`, `20.x`, or `22.x LTS` (Node 22 LTS recommended)
-- **Package Manager**: `npm` (v9+ or v10+), `yarn`, `pnpm`, or `bun`
-- **Git**: Installed and configured
-- **Browser Compatibility**: Any modern browser supporting WebAssembly and WebGL 2.0 (Chrome, Edge, Firefox, Safari)
-
-Verify versions on your system:
-```bash
-node -v   # Expected: v18.0.0 or higher (e.g. v22.13.0)
-npm -v    # Expected: v9.0.0 or higher
-```
+- **For Track A (React/Node)**: Node.js 18.x, 20.x, or 22.x LTS (Node 22 recommended) and npm v9+.
+- **For Track B (Python Streamlit)**: Python 3.10+ or 3.11+ and pip.
+- **For Docker**: Docker Desktop or Docker Engine 24+.
+- **Browser Compatibility**: Any modern browser supporting WebGL 2.0 and WebAssembly.
 
 ---
 
-## 2. Installing Dependencies
+## 2. Track A: Enterprise React / TypeScript / Node.js Deployment
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/Ishank2301/Crickazz.git
-   cd Crickazz
-   ```
-
-2. **Clean Install**:
-   Use `npm ci` for deterministic, clean installs in continuous integration and production environments:
-   ```bash
-   npm ci
-   ```
-   *Alternatively, in development environments*:
-   ```bash
-   npm install
-   ```
-
-3. **Verify Dependencies**:
-   Ensure all dependencies (React 19, Three.js, sql.js, Recharts, Lucide, Tailwind CSS) are resolved without peer dependency conflicts.
-
----
-
-## 3. Environment Variables Setup
-
-The application uses minimal environment configuration. All variables are optional with sensible fallbacks:
-
-### Variable Definitions
-
-| Variable | Scope | Required | Default | Description |
-|----------|-------|----------|---------|-------------|
-| `PORT` | Server | Optional | `3000` | Port for the production Node server (`server.ts`). |
-| `GEMINI_API_KEY` | Server | Optional | None | Google Gemini API key used by `/api/transcribe` for voice query transcription. |
-| `VITE_CRICBUZZ_API_KEY` | Client (Vite) | Optional | None | RapidAPI Cricbuzz key for live match feeds. If omitted, the app smoothly uses realistic internal match streams and zero-latency local state. |
-
-### Setting Up Local Environment
-
-Copy the provided `.env.example` template to `.env`:
+### Dependency Installation & Building
 ```bash
-cp .env.example .env
-```
+# 1. Clone repository
+git clone https://github.com/Ishank2301/Crickazz.git
+cd Crickazz
 
-Edit `.env` with your preferred editor:
-```env
-# Server port
-PORT=3000
+# 2. Install dependencies cleanly
+npm ci
 
-# Optional: Google Gemini API key for audio speech transcription
-GEMINI_API_KEY=your_gemini_api_key_here
-
-# Optional: RapidAPI Cricbuzz key for live ball-by-ball score streams
-VITE_CRICBUZZ_API_KEY=your_rapidapi_cricbuzz_key_here
-```
-
-> **Security Note**: Never commit your actual `.env` file containing private API keys to git. `.env` is listed in `.gitignore`.
-
----
-
-## 4. Building the Project with Vite
-
-The build pipeline performs TypeScript validation followed by Vite bundling and asset minification:
-
-```bash
+# 3. Build optimized production bundle
 npm run build
-```
 
-Under the hood, this executes:
-```bash
-tsc && vite build
-```
-
-### Build Artifacts
-Upon completion, the optimized production bundles are generated inside the `dist/` directory:
-```
-dist/
-├── index.html                 # Minified HTML entrypoint with preloaded fonts
-├── sql-wasm.wasm              # SQLite WebAssembly binary (copied from public/)
-├── sql-wasm-browser.wasm      # Browser-specific SQLite WebAssembly binary
-├── assets/
-│   ├── index-[hash].js        # Code-split JavaScript bundle
-│   ├── index-[hash].css       # Compiled Tailwind CSS bundle
-│   └── ...
-```
-
----
-
-## 5. Local Production Preview
-
-To test your production build locally before deploying to remote servers:
-
-### Option A: Using Vite Preview
-```bash
-npm run preview
-```
-Runs the Vite preview server at `http://localhost:3000`.
-
-### Option B: Using the Full-Stack Production Server (`server.ts`)
-```bash
+# 4. Launch production server
 npm start
 ```
-Runs the production HTTP server (which also powers the `/api/transcribe` speech endpoint and serves `.wasm` assets with immutable cache headers) at `http://localhost:3000`.
+The application will be served on `http://localhost:3000`.
 
----
+### Deploying to Vercel
+The repository includes `vercel.json` configured with SPA rewrites and `.wasm` headers.
 
-## 6. Deploying to Vercel
+- **Vercel CLI**:
+  ```bash
+  npm install -g vercel
+  vercel --prod
+  ```
+- **Vercel Git Integration**:
+  1. Connect `Ishank2301/Crickazz` in [Vercel Dashboard](https://vercel.com/new).
+  2. Framework Preset: **Vite**.
+  3. Build Command: `npm run build`.
+  4. Output Directory: `dist`.
+  5. Click **Deploy**.
 
-Vercel provides edge network hosting for Vite single-page applications.
+### Deploying to Netlify
+The repository includes `netlify.toml` with single-page redirects and immutable `.wasm` headers.
 
-The repository includes a ready-to-use `vercel.json` file:
-```json
-{
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/(.*).wasm",
-      "headers": [
-        {
-          "key": "Content-Type",
-          "value": "application/wasm"
-        },
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
-        }
-      ]
-    }
-  ]
-}
-```
+- **Netlify CLI**:
+  ```bash
+  npm install -g netlify-cli
+  npm run build
+  netlify deploy --prod --dir=dist
+  ```
+- **Netlify Git Integration**:
+  Import repository in [Netlify Dashboard](https://app.netlify.com); build settings are automatically read from `netlify.toml`.
 
-### Method 1: Deploying via Vercel Git Integration (Recommended)
-1. Push your code to your GitHub repository:
-   ```bash
-   git push origin main
-   ```
-2. Log in to [vercel.com](https://vercel.com) and click **"Add New..."** > **"Project"**.
-3. Import your GitHub repository: `Ishank2301/Crickazz`.
-4. Configure Project Settings:
-   - **Framework Preset**: `Vite`
-   - **Root Directory**: `./`
-   - **Build Command**: `npm run build`
-   - **Output Directory**: `dist`
-   - **Install Command**: `npm ci`
-5. Under **Environment Variables**, add any optional keys (`GEMINI_API_KEY`, `VITE_CRICBUZZ_API_KEY`).
-6. Click **Deploy**.
+### Containerized Docker Deployment
+The multi-stage `Dockerfile` provides a `node-runner` target:
 
-### Method 2: Deploying via Vercel CLI
 ```bash
-# 1. Install CLI globally
-npm install -g vercel
+# Build image
+docker build --target node-runner -t crickazz-node:latest .
 
-# 2. Login to Vercel
-vercel login
-
-# 3. Deploy to production
-vercel --prod
-```
-
----
-
-## 7. Deploying to Netlify
-
-Netlify hosts the Vite SPA across its global application delivery network.
-
-The repository includes `netlify.toml`:
-```toml
-[build]
-  command = "npm run build"
-  publish = "dist"
-
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-
-[[headers]]
-  for = "/*.wasm"
-  [headers.values]
-    Content-Type = "application/wasm"
-    Cache-Control = "public, max-age=31536000, immutable"
-
-[[headers]]
-  for = "/*"
-  [headers.values]
-    X-Frame-Options = "SAMEORIGIN"
-    X-Content-Type-Options = "nosniff"
-```
-
-### Method 1: Deploying via Netlify Git Integration
-1. Log in to [netlify.com](https://app.netlify.com).
-2. Click **"Add new site"** > **"Import an existing project"**.
-3. Authorize GitHub and select `Ishank2301/Crickazz`.
-4. Netlify will automatically detect settings from `netlify.toml`:
-   - **Build command**: `npm run build`
-   - **Publish directory**: `dist`
-5. Set environment variables under **Site configuration > Environment variables**.
-6. Click **Deploy Crickazz**.
-
-### Method 2: Deploying via Netlify CLI
-```bash
-# 1. Install Netlify CLI
-npm install -g netlify-cli
-
-# 2. Authenticate
-netlify login
-
-# 3. Build project
-npm run build
-
-# 4. Deploy to production
-netlify deploy --prod --dir=dist
-```
-
----
-
-## 8. Deploying with Docker
-
-The project contains a multi-stage `Dockerfile` based on Alpine Linux with built-in non-root security context.
-
-### Build and Run Container
-```bash
-# 1. Build the Docker image
-docker build -t crickazz-livestats:latest .
-
-# 2. Run container on port 3000
+# Run container on port 3000
 docker run -d \
-  --name crickazz \
+  --name crickazz-web \
   -p 3000:3000 \
   -e PORT=3000 \
-  -e GEMINI_API_KEY="your_optional_gemini_key" \
+  -e GEMINI_API_KEY="optional_gemini_key" \
   --restart unless-stopped \
-  crickazz-livestats:latest
+  crickazz-node:latest
 
-# 3. Check health status
-docker ps
+# Verify health check
 curl http://localhost:3000/healthz
-# Returns: {"status":"healthy","uptime":...}
+# Returns: {"status":"healthy"}
 ```
 
----
-
-## 9. Deploying to Google Cloud Run
-
-Deploy directly from source without managing Docker daemons manually:
-
+### Deploying to Google Cloud Run
 ```bash
-# 1. Select Google Cloud project
-gcloud config set project YOUR_PROJECT_ID
-
-# 2. Deploy from source
-gcloud run deploy crickazz-livestats \
+gcloud run deploy crickazz-web \
   --source . \
   --region asia-southeast1 \
   --platform managed \
   --allow-unauthenticated \
-  --port 3000 \
-  --min-instances 0 \
-  --max-instances 10
+  --port 3000
 ```
 
-Google Cloud Build will automatically compile the multi-stage Docker container and provision an autoscaling HTTPS URL.
-
----
-
-## 10. Deploying to Linux / VPS with PM2 & Nginx
-
-For dedicated virtual private servers (Ubuntu 22.04 / 24.04, Debian, AWS EC2, DigitalOcean):
-
-### Step 1: Install System Prerequisites
+### Linux VPS with PM2 & Nginx
 ```bash
-# Update packages
-sudo apt update && sudo apt upgrade -y
-
-# Install Node.js 22 LTS
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt install -y nodejs nginx
-
-# Install PM2 process manager
+# Install PM2
 sudo npm install -g pm2
-```
 
-### Step 2: Clone and Build
-```bash
-cd /var/www
-sudo git clone https://github.com/Ishank2301/Crickazz.git
-cd Crickazz
-sudo chown -R $USER:$USER /var/www/Crickazz
-
-# Install dependencies and build
+# Build & launch
 npm ci
 npm run build
+pm2 start "npm run start" --name "crickazz-web"
+pm2 save && pm2 startup
 ```
 
-### Step 3: Run with PM2
-```bash
-# Start background service
-pm2 start "npm run start" --name "crickazz-production"
-
-# Configure PM2 to start on system boot
-pm2 save
-pm2 startup
-```
-
-### Step 4: Configure Nginx Reverse Proxy
-Create `/etc/nginx/sites-available/crickazz`:
+Nginx configuration block:
 ```nginx
 server {
     listen 80;
@@ -369,12 +148,10 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
         proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_cache_bypass $http_upgrade;
     }
 
-    # CRITICAL: Preserve WebAssembly MIME headers
+    # Ensure WebAssembly MIME type is preserved
     location ~* \.wasm$ {
         proxy_pass http://127.0.0.1:3000;
         add_header Content-Type application/wasm;
@@ -383,50 +160,106 @@ server {
 }
 ```
 
-Enable site and restart Nginx:
+---
+
+## 3. Track B: Python Streamlit Application Deployment
+
+The Streamlit track provides an interactive multi-page Python dashboard with full access to the SQLite database, statistical analysis, and an embedded Three.js 3D Hawkeye stadium.
+
+### Local Environment Setup
 ```bash
-sudo ln -s /etc/nginx/sites-available/crickazz /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl restart nginx
+# 1. Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Launch Streamlit
+streamlit run main.py
+```
+Streamlit opens automatically at `http://localhost:8501`.
+
+### Deploying to Streamlit Community Cloud (1-Click)
+1. Fork or push this repository to your GitHub account (`Ishank2301/Crickazz`).
+2. Visit [share.streamlit.io](https://share.streamlit.io/).
+3. Click **"New app"**.
+4. Select Repository: `Ishank2301/Crickazz`, Branch: `main`, Main file path: `main.py`.
+5. Click **"Deploy!"**.
+
+### Containerized Streamlit with Docker
+The repository includes a dedicated `streamlit-runner` target inside `Dockerfile`:
+
+```bash
+# Build Streamlit image
+docker build --target streamlit-runner -t crickazz-streamlit:latest .
+
+# Run container on port 8501
+docker run -d \
+  --name crickazz-streamlit \
+  -p 8501:8501 \
+  --restart unless-stopped \
+  crickazz-streamlit:latest
+
+# Verify health status
+curl http://localhost:8501/_stcore/health
+# Returns: ok
+```
+
+### Deploying Streamlit to Cloud Run
+```bash
+gcloud run deploy crickazz-streamlit \
+  --source . \
+  --region asia-southeast1 \
+  --platform managed \
+  --allow-unauthenticated \
+  --port 8501
 ```
 
 ---
 
-## 11. WASM & Routing Architecture
+## 4. 3D Hawkeye Stadium & Preset Camera Views Architecture
 
-### The SQLite WebAssembly Requirement
-The in-browser cricket analytics engine requires two static binaries:
-1. `sql-wasm.wasm`
-2. `sql-wasm-browser.wasm`
+Both tracks integrate the Three.js 3D physics viewport with official **Preset Camera Views**:
 
-These files reside in `/public/` and are automatically copied to `/dist/` during `npm run build`.
+| Camera Preset | Coordinates & Elevation | Vantage Perspective |
+|---|---|---|
+| **🦅 Bird's Eye** | Pos: `(0, 36, 0.05)`, Target: `(0, 0, 0)` | 360° top-down aerial overview of the 22-yard pitch and boundary ropes. |
+| **🎯 Bowler's End** | Pos: `(0, 3.8, -19)`, Target: `(0, 0.8, 8)` | Behind the bowling crease following outswing, inswing, and seam deviation down the pitch. |
+| **⚖️ Umpire View** | Pos: `(0, 1.75, -12.5)`, Target: `(0, 0.71, 10)` | Official 1.75m eye level behind non-striker stumps evaluating the head-on LBW line & length. |
 
-**MIME Requirement**: Browsers will reject WebAssembly compilation if the server responds with `Content-Type: text/html`. Both `vercel.json` and `netlify.toml` explicitly configure:
-```
-Content-Type: application/wasm
-```
-
-### Single-Page Application (SPA) Routing
-Because routing is managed client-side by React, direct navigations or page refreshes must rewrite all non-asset requests to `/index.html`. Both platform configs include 200 rewrites for `/*` -> `/index.html`.
+### Cinematic Gliding
+When toggling views, the camera executes smooth cinematic vector interpolation (`lerp`) over ~800ms before releasing manual orbital control back to the user's mouse/trackpad.
 
 ---
 
-## 12. Troubleshooting Common Issues
+## 5. Environment Variables Reference
 
-### Issue 1: "WebAssembly: Response has unsupported MIME type 'text/html'"
-- **Cause**: The server returned the fallback `index.html` instead of the actual `.wasm` binary file.
-- **Fix**: Verify that `public/sql-wasm.wasm` and `public/sql-wasm-browser.wasm` are present in your deployment and that your platform's `.wasm` header rule is active. Verify via:
-  ```bash
-  curl -I https://your-domain.com/sql-wasm.wasm
-  ```
+| Variable | Scope | Required | Default | Description |
+|---|---|---|---|---|
+| `PORT` | Node server | Optional | `3000` | Port for the production Node server (`server.ts`). |
+| `GEMINI_API_KEY` | Server | Optional | None | Google Gemini API key used by `/api/transcribe` for audio transcription. |
+| `VITE_CRICBUZZ_API_KEY` | Client / Streamlit | Optional | None | RapidAPI Cricbuzz key for live match feeds. Realistic match streams are used if not provided. |
 
-### Issue 2: 404 Not Found on Page Refresh
-- **Cause**: Missing SPA rewrite configuration.
-- **Fix**: Ensure `vercel.json` (rewrites section) or `netlify.toml` (redirects section) is committed to your repository.
+---
 
-### Issue 3: 3D Pitch WebGL Context Warning
-- **Cause**: Hardware acceleration disabled or outdated browser drivers.
-- **Fix**: The codebase uses `THREE.PCFShadowMap` and includes automated context recovery handlers (`webglcontextrestored`). Ensure hardware acceleration is enabled in browser settings.
+## 6. Post-Deployment Health Checks & Troubleshooting
 
-### Issue 4: Verifying System Health Post-Deploy
-Open the deployed application in your browser and click on the **Diagnostics** tab in the navigation bar to run live latency benchmarks and verify that all 10 system test suites show green checkmarks.
+### Verification Checklist
+1. **WASM MIME Header (Track A)**:
+   ```bash
+   curl -I https://your-domain.com/sql-wasm.wasm
+   # Must return: Content-Type: application/wasm
+   ```
+2. **Node Server Health Check**:
+   ```bash
+   curl https://your-domain.com/healthz
+   # Must return: {"status":"healthy"}
+   ```
+3. **Streamlit Health Check (Track B)**:
+   ```bash
+   curl https://your-streamlit-domain.com/_stcore/health
+   # Must return: ok
+   ```
+4. **In-App Diagnostics Dashboard**:
+   Open the web app and click the **Diagnostics** tab to view real-time 60 FPS charts, JavaScript memory gauges, and sub-millisecond query benchmark results.
