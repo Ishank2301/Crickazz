@@ -7,6 +7,7 @@
     "dev": "vite --host 0.0.0.0 --port 3000",
     "build": "tsc && vite build",
     "lint": "tsc --noEmit",
+    "test": "tsx tests/run-all-tests.ts",
     "preview": "vite preview --port 3000"
   },
   "dependencies": {
@@ -29,6 +30,7 @@
     "@types/three": "^0.186.0",
     "@vitejs/plugin-react": "^4.3.4",
     "tailwindcss": "^4.0.9",
+    "tsx": "^4.23.15",
     "typescript": "^5.7.3",
     "vite": "^6.2.0"
   }
