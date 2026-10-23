@@ -594,6 +594,18 @@ export function CricketPitch3D() {
 
     animFrameRef.current = requestAnimationFrame(animate);
 
+    // 15. WebGL Context Loss & Restoration Safety
+    const handleContextLost = (event: Event) => {
+      event.preventDefault();
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
+    const handleContextRestored = () => {
+      renderer.setSize(container.clientWidth || 800, container.clientHeight || 520);
+      animFrameRef.current = requestAnimationFrame(animate);
+    };
+    renderer.domElement.addEventListener('webglcontextlost', handleContextLost, false);
+    renderer.domElement.addEventListener('webglcontextrestored', handleContextRestored, false);
+
     // Cleanup on unmount
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
@@ -602,6 +614,19 @@ export function CricketPitch3D() {
       window.removeEventListener('mouseup', onMouseUp);
       container.removeEventListener('wheel', onWheel);
       window.removeEventListener('resize', onResize);
+      renderer.domElement.removeEventListener('webglcontextlost', handleContextLost);
+      renderer.domElement.removeEventListener('webglcontextrestored', handleContextRestored);
+      
+      scene.traverse((object) => {
+        if (object instanceof THREE.Mesh) {
+          if (object.geometry) object.geometry.dispose();
+          if (Array.isArray(object.material)) {
+            object.material.forEach((m) => m.dispose());
+          } else if (object.material) {
+            object.material.dispose();
+          }
+        }
+      });
       renderer.dispose();
     };
   }, []);
