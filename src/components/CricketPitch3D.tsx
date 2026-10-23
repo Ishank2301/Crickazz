@@ -13,7 +13,53 @@ import {
   Wind,
   Target,
   Sparkles,
+  Camera,
+  UserCheck,
+  Video,
 } from 'lucide-react';
+import { sounds } from '../utils/audio';
+
+export type PresetCameraView = 'birds_eye' | 'bowlers_end' | 'umpire_view';
+
+export interface CameraViewConfig {
+  id: PresetCameraView;
+  label: string;
+  badge: string;
+  sublabel: string;
+  position: THREE.Vector3;
+  target: THREE.Vector3;
+  spherical: { radius: number; theta: number; phi: number };
+}
+
+export const PRESET_CAMERA_VIEWS: CameraViewConfig[] = [
+  {
+    id: 'birds_eye',
+    label: "Bird's Eye",
+    badge: '360° Aerial',
+    sublabel: 'Full pitch, field rings & boundary overview from above',
+    position: new THREE.Vector3(0, 36, 0.05),
+    target: new THREE.Vector3(0, 0, 0),
+    spherical: { radius: 36, theta: 0, phi: 0.06 },
+  },
+  {
+    id: 'bowlers_end',
+    label: "Bowler's End",
+    badge: 'Trajectory',
+    sublabel: 'Behind bowler following swing, seam & dip down the wicket',
+    position: new THREE.Vector3(0, 3.8, -19),
+    target: new THREE.Vector3(0, 0.8, 8),
+    spherical: { radius: 24, theta: Math.PI, phi: 1.25 },
+  },
+  {
+    id: 'umpire_view',
+    label: 'Umpire View',
+    badge: 'LBW Cam',
+    sublabel: '1.75m eye level behind non-striker stumps evaluating LBW line',
+    position: new THREE.Vector3(0, 1.75, -12.5),
+    target: new THREE.Vector3(0, 0.71, 10),
+    spherical: { radius: 18, theta: Math.PI, phi: 1.48 },
+  },
+];
 
 interface DeliveryPreset {
   id: string;
@@ -147,6 +193,7 @@ export function CricketPitch3D() {
   const [isDockCollapsed, setIsDockCollapsed] = useState<boolean>(false);
   const [selectedShot, setSelectedShot] = useState<WagonShot | null>(null);
   const [cameraPreset, setCameraPreset] = useState<'bowler' | 'batsman' | 'side' | 'overhead'>('bowler');
+  const [activeCameraView, setActiveCameraView] = useState<PresetCameraView>('bowlers_end');
 
   // Animation & Three.js refs
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -164,12 +211,18 @@ export function CricketPitch3D() {
   // Mouse orbit dragging state
   const isMouseDownRef = useRef<boolean>(false);
   const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const cameraTargetRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0.5, 0));
+  const cameraTargetRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0.8, 8));
   const cameraSphericalRef = useRef<{ radius: number; theta: number; phi: number }>({
-    radius: 26,
-    theta: 0,
-    phi: Math.PI / 4,
+    radius: 24,
+    theta: Math.PI,
+    phi: 1.25,
   });
+
+  // Cinematic smooth camera glide interpolation refs
+  const targetCamPosRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 3.8, -19));
+  const targetCamLookAtRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0.8, 8));
+  const currentCamLookAtRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0.8, 8));
+  const isTransitioningCameraRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -497,6 +550,7 @@ export function CricketPitch3D() {
     // 12. Mouse Drag Event Listeners for Orbiting
     const onMouseDown = (e: MouseEvent) => {
       isMouseDownRef.current = true;
+      isTransitioningCameraRef.current = false;
       mousePosRef.current = { x: e.clientX, y: e.clientY };
     };
 
@@ -588,6 +642,20 @@ export function CricketPitch3D() {
         }
       }
 
+      // Smooth cinematic camera gliding between preset views
+      if (isTransitioningCameraRef.current && camera) {
+        camera.position.lerp(targetCamPosRef.current, 0.08);
+        currentCamLookAtRef.current.lerp(targetCamLookAtRef.current, 0.08);
+        camera.lookAt(currentCamLookAtRef.current);
+
+        if (camera.position.distanceTo(targetCamPosRef.current) < 0.04) {
+          camera.position.copy(targetCamPosRef.current);
+          currentCamLookAtRef.current.copy(targetCamLookAtRef.current);
+          camera.lookAt(currentCamLookAtRef.current);
+          isTransitioningCameraRef.current = false;
+        }
+      }
+
       renderer.render(scene, camera);
       animFrameRef.current = requestAnimationFrame(animate);
     };
@@ -643,23 +711,37 @@ export function CricketPitch3D() {
     cameraRef.current.lookAt(target);
   };
 
+  // Select one of the broadcast preset camera views ('Bird's Eye', 'Bowler's End', 'Umpire View')
+  const handleSelectCameraView = (viewId: PresetCameraView) => {
+    setActiveCameraView(viewId);
+    sounds.playClick();
+    const config = PRESET_CAMERA_VIEWS.find((v) => v.id === viewId);
+    if (!config) return;
+
+    cameraSphericalRef.current = { ...config.spherical };
+    targetCamPosRef.current.copy(config.position);
+    targetCamLookAtRef.current.copy(config.target);
+    cameraTargetRef.current.copy(config.target);
+    isTransitioningCameraRef.current = true;
+  };
+
   // Switch camera angle presets
   const handleCameraPreset = (preset: 'bowler' | 'batsman' | 'side' | 'overhead') => {
     setCameraPreset(preset);
     if (preset === 'bowler') {
-      cameraSphericalRef.current = { radius: 24, theta: Math.PI, phi: 1.1 };
-      cameraTargetRef.current = new THREE.Vector3(0, 0.8, 4);
+      handleSelectCameraView('bowlers_end');
+    } else if (preset === 'overhead') {
+      handleSelectCameraView('birds_eye');
     } else if (preset === 'batsman') {
-      cameraSphericalRef.current = { radius: 22, theta: 0, phi: 1.15 };
-      cameraTargetRef.current = new THREE.Vector3(0, 0.8, 4);
+      handleSelectCameraView('umpire_view');
     } else if (preset === 'side') {
+      sounds.playClick();
       cameraSphericalRef.current = { radius: 20, theta: Math.PI / 2, phi: 1.3 };
       cameraTargetRef.current = new THREE.Vector3(0, 0.5, 0);
-    } else if (preset === 'overhead') {
-      cameraSphericalRef.current = { radius: 36, theta: 0, phi: 0.15 };
-      cameraTargetRef.current = new THREE.Vector3(0, 0, 0);
+      targetCamPosRef.current.set(20, 4.5, 0);
+      targetCamLookAtRef.current.set(0, 0.5, 0);
+      isTransitioningCameraRef.current = true;
     }
-    updateCameraPosition();
   };
 
   // Toggle modes
@@ -757,6 +839,65 @@ export function CricketPitch3D() {
         </div>
       )}
 
+      {/* Preset Camera Views Overlay */}
+      <div className="absolute top-16 right-4 z-10 bg-[#0b0f19]/90 backdrop-blur-md p-2.5 rounded-lg border border-slate-800 shadow-xl pointer-events-auto flex flex-col gap-2 w-64">
+        <div className="flex items-center justify-between pb-1.5 border-b border-slate-800/80 px-1">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-200">
+            <Camera className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Preset Camera Views</span>
+          </div>
+          <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Cinematic 3D</span>
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 gap-1.5">
+          {PRESET_CAMERA_VIEWS.map((view) => {
+            const isActive = activeCameraView === view.id;
+            return (
+              <button
+                key={view.id}
+                type="button"
+                onClick={() => handleSelectCameraView(view.id)}
+                className={`flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-all ${
+                  isActive
+                    ? 'bg-emerald-950/80 border border-emerald-600/60 text-emerald-300 font-semibold shadow-[0_0_12px_rgba(16,185,129,0.15)]'
+                    : 'bg-slate-900/70 hover:bg-slate-850 border border-slate-800/80 text-slate-400 hover:text-slate-200'
+                }`}
+                title={view.sublabel}
+              >
+                <div className="flex items-center gap-2">
+                  {view.id === 'birds_eye' && (
+                    <Eye className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
+                  )}
+                  {view.id === 'bowlers_end' && (
+                    <Target className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
+                  )}
+                  {view.id === 'umpire_view' && (
+                    <UserCheck className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
+                  )}
+                  <span>{view.label}</span>
+                </div>
+                <span
+                  className={`text-[9px] font-mono px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                    isActive
+                      ? 'bg-emerald-900/90 text-emerald-200 border border-emerald-700/80'
+                      : 'bg-slate-950 text-slate-500'
+                  }`}
+                >
+                  {view.badge}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="text-[10px] text-slate-400 font-mono px-1 leading-tight">
+          {PRESET_CAMERA_VIEWS.find((v) => v.id === activeCameraView)?.sublabel}
+        </div>
+      </div>
+
       {/* Collapsible Bottom Dock (Floating above canvas) */}
       <div
         className="absolute z-20 transition-all duration-300 ease-out"
@@ -851,42 +992,39 @@ export function CricketPitch3D() {
 
                 <div className="h-4 w-[1px] bg-slate-800 mx-1" />
 
-                <span className="text-[11px] text-slate-500">Angle:</span>
+                <span className="text-[11px] text-slate-500 font-medium">Angle:</span>
                 <button
                   type="button"
-                  onClick={() => handleCameraPreset('bowler')}
-                  className={`px-2 py-0.5 rounded text-xs transition-colors ${
-                    cameraPreset === 'bowler' ? 'bg-slate-800 text-white font-medium' : 'text-slate-400 hover:text-slate-200'
+                  onClick={() => handleSelectCameraView('bowlers_end')}
+                  className={`px-2.5 py-0.5 rounded text-xs transition-colors ${
+                    activeCameraView === 'bowlers_end'
+                      ? 'bg-emerald-950/80 border border-emerald-600/60 text-emerald-300 font-semibold shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
                   }`}
                 >
-                  Bowler
+                  Bowler's End
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleCameraPreset('batsman')}
-                  className={`px-2 py-0.5 rounded text-xs transition-colors ${
-                    cameraPreset === 'batsman' ? 'bg-slate-800 text-white font-medium' : 'text-slate-400 hover:text-slate-200'
+                  onClick={() => handleSelectCameraView('birds_eye')}
+                  className={`px-2.5 py-0.5 rounded text-xs transition-colors ${
+                    activeCameraView === 'birds_eye'
+                      ? 'bg-emerald-950/80 border border-emerald-600/60 text-emerald-300 font-semibold shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
                   }`}
                 >
-                  Batsman
+                  Bird's Eye
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleCameraPreset('side')}
-                  className={`px-2 py-0.5 rounded text-xs transition-colors ${
-                    cameraPreset === 'side' ? 'bg-slate-800 text-white font-medium' : 'text-slate-400 hover:text-slate-200'
+                  onClick={() => handleSelectCameraView('umpire_view')}
+                  className={`px-2.5 py-0.5 rounded text-xs transition-colors ${
+                    activeCameraView === 'umpire_view'
+                      ? 'bg-emerald-950/80 border border-emerald-600/60 text-emerald-300 font-semibold shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
                   }`}
                 >
-                  Side
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleCameraPreset('overhead')}
-                  className={`px-2 py-0.5 rounded text-xs transition-colors ${
-                    cameraPreset === 'overhead' ? 'bg-slate-800 text-white font-medium' : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  Drone
+                  Umpire View
                 </button>
               </div>
             </div>
