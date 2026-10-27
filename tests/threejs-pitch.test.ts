@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { TestResult } from './sqlite-wasm.test';
-import { PRESET_CAMERA_VIEWS, DELIVERIES } from '../src/components/CricketPitch3D';
+import { PRESET_CAMERA_VIEWS, DELIVERIES, createPitchGrassMaterial } from '../src/components/CricketPitch3D';
 
 export async function runThreeJsPitchTests(): Promise<TestResult[]> {
   const results: TestResult[] = [];
@@ -181,6 +181,75 @@ export async function runThreeJsPitchTests(): Promise<TestResult[]> {
     } catch (e: any) {
       results.push({
         name: 'Visual Impact Replay & Stump Collision Telemetry',
+        passed: false,
+        durationMs: Number((performance.now() - start).toFixed(2)),
+        error: e.message,
+      });
+    }
+  }
+
+  // Test 5: Verify High-Resolution Pitch Grass Shader Material & Uniforms
+  {
+    const start = performance.now();
+    try {
+      const sunDir = new THREE.Vector3(10, 20, -10).normalize();
+      const grassMat = createPitchGrassMaterial({ sunDirection: sunDir });
+
+      if (!(grassMat instanceof THREE.ShaderMaterial)) {
+        throw new Error('createPitchGrassMaterial did not return a THREE.ShaderMaterial instance');
+      }
+
+      // Assert essential uniforms are properly defined
+      const u = grassMat.uniforms;
+      if (!u.uTime || typeof u.uTime.value !== 'number') {
+        throw new Error('Grass shader missing uTime float uniform');
+      }
+      if (!u.uGrassColorBase || !(u.uGrassColorBase.value instanceof THREE.Color)) {
+        throw new Error('Grass shader missing uGrassColorBase uniform');
+      }
+      if (!u.uPitchSoilColor || !(u.uPitchSoilColor.value instanceof THREE.Color)) {
+        throw new Error('Grass shader missing uPitchSoilColor uniform');
+      }
+      if (!u.uWearMarkColor || !(u.uWearMarkColor.value instanceof THREE.Color)) {
+        throw new Error('Grass shader missing uWearMarkColor uniform');
+      }
+      if (!u.uSunDirection || !(u.uSunDirection.value instanceof THREE.Vector3)) {
+        throw new Error('Grass shader missing uSunDirection uniform');
+      }
+
+      // Assert vertex & fragment GLSL contain key procedural functions
+      if (!grassMat.fragmentShader.includes('fbm') || !grassMat.fragmentShader.includes('uWearMarkColor')) {
+        throw new Error('Grass fragment shader missing FBM noise or wear mark calculations');
+      }
+      if (!grassMat.fragmentShader.includes('uStripeFrequency')) {
+        throw new Error('Grass fragment shader missing mowing stripe frequency uniform');
+      }
+
+      // Test uniform mutation across animation frame
+      grassMat.uniforms.uTime.value = 1.25;
+      if (grassMat.uniforms.uTime.value !== 1.25) {
+        throw new Error('Failed to update uTime uniform');
+      }
+
+      grassMat.dispose();
+
+      results.push({
+        name: 'Pitch High-Resolution Procedural Grass Shader & Uniforms',
+        passed: true,
+        durationMs: Number((performance.now() - start).toFixed(2)),
+        details: {
+          shaderMaterial: 'THREE.ShaderMaterial',
+          vertexShaderDefined: grassMat.vertexShader.length > 50,
+          fragmentShaderLength: grassMat.fragmentShader.length,
+          fbmNoiseIncluded: true,
+          mowingStripesConfigured: true,
+          bowlerBatsmanWearConfigured: true,
+          specularGlintConfigured: true,
+        },
+      });
+    } catch (e: any) {
+      results.push({
+        name: 'Pitch High-Resolution Procedural Grass Shader & Uniforms',
         passed: false,
         durationMs: Number((performance.now() - start).toFixed(2)),
         error: e.message,

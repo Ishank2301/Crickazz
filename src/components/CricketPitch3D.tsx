@@ -339,6 +339,139 @@ export const WAGON_SHOTS: WagonShot[] = [
   { id: '10', runs: 6, shotName: 'Helicopter over Long-on', distanceMeters: 102, angleRad: Math.PI * 0.6, color: 0xf59e0b, height: 11.0, batsman: 'MS Dhoni' },
 ];
 
+/**
+ * Creates high-resolution procedural grass & soil shader material for the 22-yard cricket pitch.
+ * Blends compacted clay center, longitudinal grass fibers, mowing lawn stripes, bowler/batsman
+ * crease wear scuffs, and specular blade glint.
+ */
+export function createPitchGrassMaterial(options?: {
+  sunDirection?: THREE.Vector3;
+}): THREE.ShaderMaterial {
+  const sunDir = options?.sunDirection ?? new THREE.Vector3(15, 25, -15).normalize();
+
+  const vertexShader = /* glsl */ `
+    varying vec2 vUv;
+    varying vec3 vWorldPosition;
+    varying vec3 vNormal;
+
+    void main() {
+      vUv = uv;
+      vec4 worldPos = modelMatrix * vec4(position, 1.0);
+      vWorldPosition = worldPos.xyz;
+      vNormal = normalize(normalMatrix * normal);
+      gl_Position = projectionMatrix * viewMatrix * worldPos;
+    }
+  `;
+
+  const fragmentShader = /* glsl */ `
+    precision highp float;
+
+    uniform float uTime;
+    uniform vec3 uGrassColorBase;
+    uniform vec3 uGrassColorLawn;
+    uniform vec3 uPitchSoilColor;
+    uniform vec3 uPitchDustColor;
+    uniform vec3 uWearMarkColor;
+    uniform vec3 uSunDirection;
+    uniform float uStripeFrequency;
+
+    varying vec2 vUv;
+    varying vec3 vWorldPosition;
+    varying vec3 vNormal;
+
+    float hash(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+    }
+
+    float noise(vec2 p) {
+      vec2 i = floor(p);
+      vec2 f = fract(p);
+      vec2 u = f * f * (3.0 - 2.0 * f);
+      return mix(
+        mix(hash(i + vec2(0.0, 0.0)), hash(i + vec2(1.0, 0.0)), u.x),
+        mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x),
+        u.y
+      );
+    }
+
+    float fbm(vec2 p) {
+      float v = 0.0;
+      float a = 0.5;
+      mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
+      for (int i = 0; i < 4; ++i) {
+        v += a * noise(p);
+        p = rot * p * 2.1 + vec2(100.0);
+        a *= 0.5;
+      }
+      return v;
+    }
+
+    void main() {
+      // 1. High-frequency longitudinal grass blade fibers along pitch length
+      float bladeNoise = noise(vUv * vec2(180.0, 420.0));
+      float fineFibers = fbm(vUv * vec2(60.0, 200.0));
+
+      // 2. Mowing lawn roller stripes across length
+      float stripe = sin(vWorldPosition.z * uStripeFrequency) * 0.5 + 0.5;
+      vec3 grassTurf = mix(uGrassColorBase, uGrassColorLawn, stripe * 0.4 + bladeNoise * 0.25);
+
+      // 3. Compacted central clay strip (22 yards central track)
+      float distFromCenter = abs(vUv.x - 0.5) * 2.0; // 0 at center, 1 at edge
+      float soilNoise = fbm(vUv * vec2(30.0, 60.0));
+      vec3 pitchClay = mix(uPitchSoilColor, uPitchDustColor, soilNoise);
+
+      // Blending central clay strip to lush grassy borders
+      float turfBlend = smoothstep(0.40, 0.82, distFromCenter + (fineFibers - 0.5) * 0.12);
+      vec3 surfaceColor = mix(pitchClay, grassTurf, turfBlend);
+
+      // 4. Bowler and Batsman crease landing wear marks
+      float batsmanCreaseWear = 1.0 - smoothstep(0.0, 0.07, abs(vUv.y - 0.91));
+      float bowlerStrideWear = 1.0 - smoothstep(0.0, 0.07, abs(vUv.y - 0.09));
+      float goodLengthWear = (1.0 - smoothstep(0.0, 0.06, abs(vUv.y - 0.76))) * (1.0 - distFromCenter);
+
+      float totalWear = clamp((batsmanCreaseWear * 0.85 + bowlerStrideWear * 0.8 + goodLengthWear * 0.6) * (1.0 - distFromCenter * 0.45), 0.0, 1.0);
+      float wearRoughness = fbm(vUv * vec2(50.0, 100.0));
+      totalWear *= smoothstep(0.2, 0.8, wearRoughness);
+
+      // Darken and abrade into scuffed dry clay where spikes dig in
+      surfaceColor = mix(surfaceColor, uWearMarkColor, totalWear * 0.8);
+
+      // 5. Directional sun lighting & subtle blade glint
+      vec3 N = normalize(vNormal);
+      vec3 L = normalize(uSunDirection);
+      float NdotL = max(dot(N, L), 0.0);
+      float diffuse = NdotL * 0.82 + 0.28;
+
+      vec3 V = normalize(cameraPosition - vWorldPosition);
+      vec3 H = normalize(L + V);
+      float NdotH = max(dot(N, H), 0.0);
+      float specular = pow(NdotH, 32.0) * (1.0 - totalWear) * (turfBlend * 0.35 + 0.08);
+
+      // Subtle dynamic wind shimmer
+      float wind = sin(uTime * 2.0 + vWorldPosition.x * 2.5 + vWorldPosition.z * 1.2) * 0.02 * turfBlend;
+
+      vec3 finalColor = surfaceColor * (diffuse + wind) + vec3(specular * 0.28);
+      gl_FragColor = vec4(finalColor, 1.0);
+    }
+  `;
+
+  return new THREE.ShaderMaterial({
+    vertexShader,
+    fragmentShader,
+    uniforms: {
+      uTime: { value: 0.0 },
+      uGrassColorBase: { value: new THREE.Color(0x235227) },
+      uGrassColorLawn: { value: new THREE.Color(0x387d3d) },
+      uPitchSoilColor: { value: new THREE.Color(0xc9a463) },
+      uPitchDustColor: { value: new THREE.Color(0xdfc085) },
+      uWearMarkColor: { value: new THREE.Color(0x8a6231) },
+      uSunDirection: { value: sunDir },
+      uStripeFrequency: { value: 1.8 },
+    },
+    side: THREE.FrontSide,
+  });
+}
+
 export function CricketPitch3D() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [activeMode, setActiveMode] = useState<'pitch' | 'trajectory' | 'wagon'>('trajectory');
@@ -377,6 +510,7 @@ export function CricketPitch3D() {
   const hawkeyePostLineRef = useRef<THREE.Line | null>(null);
   const hawkeyeProjectedLineRef = useRef<THREE.Line | null>(null);
   const bounceMarkerRef = useRef<THREE.Mesh | null>(null);
+  const pitchGrassShaderRef = useRef<THREE.ShaderMaterial | null>(null);
   const wagonLinesRef = useRef<THREE.Group | null>(null);
   const pitchDimensionGroupRef = useRef<THREE.Group | null>(null);
   const stumpsGroupRef = useRef<THREE.Group | null>(null);
@@ -1138,6 +1272,11 @@ export function CricketPitch3D() {
           camera.lookAt(currentCamLookAtRef.current);
           isTransitioningCameraRef.current = false;
         }
+      }
+
+      // Animate procedural grass shader micro-shimmer
+      if (pitchGrassShaderRef.current) {
+        pitchGrassShaderRef.current.uniforms.uTime.value = currentTime * 0.001;
       }
 
       renderer.render(scene, camera);
