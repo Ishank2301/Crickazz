@@ -204,4 +204,5 @@ with tab_db_status:
         st.error(f"Database error: {e}")
 
 st.markdown("---")
-st.caption("Cricbuzz LiveStats • Created by Ishank2301 • Python & SQL Sports Analytics Project")
+st.caption("Cricbuzz LiveStats • Created by Ishank2301")
+st.caption("If you liked the project please star the repo.")
