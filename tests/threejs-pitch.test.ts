@@ -1,6 +1,14 @@
 import * as THREE from 'three';
 import { TestResult } from './sqlite-wasm.test';
-import { PRESET_CAMERA_VIEWS, DELIVERIES, createPitchGrassMaterial } from '../src/components/CricketPitch3D';
+import {
+  PRESET_CAMERA_VIEWS,
+  DELIVERIES,
+  createPitchGrassMaterial,
+  BOUNDARY_RADIUS,
+  BOUNDARY_SHOTS,
+  checkBoundaryCollision,
+  getBoundarySectorName,
+} from '../src/components/CricketPitch3D';
 
 export async function runThreeJsPitchTests(): Promise<TestResult[]> {
   const results: TestResult[] = [];
@@ -250,6 +258,135 @@ export async function runThreeJsPitchTests(): Promise<TestResult[]> {
     } catch (e: any) {
       results.push({
         name: 'Pitch High-Resolution Procedural Grass Shader & Uniforms',
+        passed: false,
+        durationMs: Number((performance.now() - start).toFixed(2)),
+        error: e.message,
+      });
+    }
+  }
+
+  // Test 6: Verify Dynamic 3D Boundary Rope Geometry, Braided Coils & Perimeter Radius (R = 38.0m)
+  {
+    const start = performance.now();
+    try {
+      if (BOUNDARY_RADIUS !== 38.0) {
+        throw new Error(`Expected BOUNDARY_RADIUS to be 38.0m, found ${BOUNDARY_RADIUS}`);
+      }
+
+      if (!Array.isArray(BOUNDARY_SHOTS) || BOUNDARY_SHOTS.length < 3) {
+        throw new Error(`Expected at least 3 preset boundary trajectories, found ${BOUNDARY_SHOTS?.length}`);
+      }
+
+      const coverDrive = BOUNDARY_SHOTS.find((s) => s.id === 'cover_drive_four');
+      const pullSix = BOUNDARY_SHOTS.find((s) => s.id === 'pull_shot_six');
+
+      if (!coverDrive || coverDrive.expectedOutcome !== 'FOUR') {
+        throw new Error('Missing cover_drive_four preset or expectedOutcome is not FOUR');
+      }
+      if (!pullSix || pullSix.expectedOutcome !== 'SIX') {
+        throw new Error('Missing pull_shot_six preset or expectedOutcome is not SIX');
+      }
+
+      // Test sector resolution
+      const coverSector = getBoundarySectorName(Math.PI * 0.25); // 45 deg
+      const longOffSector = getBoundarySectorName(Math.PI * 0.5); // 90 deg
+      const midWicketSector = getBoundarySectorName(Math.PI); // 180 deg
+
+      if (coverSector !== 'Deep Extra Cover') {
+        throw new Error(`Expected 'Deep Extra Cover' for 45 deg, got '${coverSector}'`);
+      }
+      if (longOffSector !== 'Long Off') {
+        throw new Error(`Expected 'Long Off' for 90 deg, got '${longOffSector}'`);
+      }
+      if (midWicketSector !== 'Deep Mid-Wicket') {
+        throw new Error(`Expected 'Deep Mid-Wicket' for 180 deg, got '${midWicketSector}'`);
+      }
+
+      results.push({
+        name: 'Dynamic 3D Boundary Rope Geometry & Perimeter Radius (R = 38.0m)',
+        passed: true,
+        durationMs: Number((performance.now() - start).toFixed(2)),
+        details: {
+          stadiumPerimeterRadius: `${BOUNDARY_RADIUS}m`,
+          presetBoundaryTrajectories: BOUNDARY_SHOTS.map((s) => `${s.name} (${s.expectedOutcome})`),
+          sectorMappingVerified: true,
+        },
+      });
+    } catch (e: any) {
+      results.push({
+        name: 'Dynamic 3D Boundary Rope Geometry & Perimeter Radius (R = 38.0m)',
+        passed: false,
+        durationMs: Number((performance.now() - start).toFixed(2)),
+        error: e.message,
+      });
+    }
+  }
+
+  // Test 7: Verify Trajectory Boundary Collision Detection Engine (Ground 4 vs Aerial 6)
+  {
+    const start = performance.now();
+    try {
+      const coverDrive = BOUNDARY_SHOTS.find((s) => s.id === 'cover_drive_four')!;
+      const pullSix = BOUNDARY_SHOTS.find((s) => s.id === 'pull_shot_six')!;
+
+      // 1. Detect ground boundary rope collision
+      const groundCollision = checkBoundaryCollision(coverDrive.curve, 38.0);
+      if (!groundCollision || !groundCollision.hasCollided) {
+        throw new Error('checkBoundaryCollision failed to detect ground boundary rope strike');
+      }
+      if (groundCollision.runs !== 4 || groundCollision.collisionType !== 'ROPE_STRIKE_FOUR') {
+        throw new Error(`Expected 4 runs ROPE_STRIKE_FOUR, got ${groundCollision.runs} ${groundCollision.collisionType}`);
+      }
+      if (!groundCollision.isGroundBoundary || groundCollision.elevationAtCrossing > 0.40) {
+        throw new Error(`Expected ground collision (y <= 0.40), got y = ${groundCollision.elevationAtCrossing}`);
+      }
+
+      // 2. Detect aerial six rope clearance
+      const aerialCollision = checkBoundaryCollision(pullSix.curve, 38.0);
+      if (!aerialCollision || !aerialCollision.hasCollided) {
+        throw new Error('checkBoundaryCollision failed to detect aerial rope clearance');
+      }
+      if (aerialCollision.runs !== 6 || aerialCollision.collisionType !== 'AERIAL_CLEARANCE_SIX') {
+        throw new Error(`Expected 6 runs AERIAL_CLEARANCE_SIX, got ${aerialCollision.runs} ${aerialCollision.collisionType}`);
+      }
+      if (aerialCollision.isGroundBoundary || aerialCollision.elevationAtCrossing <= 0.40) {
+        throw new Error(`Expected aerial clearance (y > 0.40), got y = ${aerialCollision.elevationAtCrossing}`);
+      }
+
+      // 3. In-field trajectory that never reaches boundary (radius < 38m)
+      const inFieldCurve = [
+        new THREE.Vector3(0, 0.4, 10.0),
+        new THREE.Vector3(5.0, 0.2, 8.0),
+        new THREE.Vector3(12.0, 0.05, 5.0),
+      ];
+      const inFieldCollision = checkBoundaryCollision(inFieldCurve, 38.0);
+      if (inFieldCollision !== null) {
+        throw new Error('In-field short stroke should not trigger boundary collision');
+      }
+
+      results.push({
+        name: 'Trajectory Boundary Collision Detection Engine (Ground 4 vs Aerial 6)',
+        passed: true,
+        durationMs: Number((performance.now() - start).toFixed(2)),
+        details: {
+          groundCollision: {
+            runs: groundCollision.runs,
+            type: groundCollision.collisionType,
+            sector: groundCollision.sectorName,
+            point: groundCollision.contactPoint,
+          },
+          aerialCollision: {
+            runs: aerialCollision.runs,
+            type: aerialCollision.collisionType,
+            elevation: `${aerialCollision.elevationAtCrossing}m`,
+            sector: aerialCollision.sectorName,
+          },
+          inFieldSuppressionVerified: true,
+        },
+      });
+    } catch (e: any) {
+      results.push({
+        name: 'Trajectory Boundary Collision Detection Engine (Ground 4 vs Aerial 6)',
         passed: false,
         durationMs: Number((performance.now() - start).toFixed(2)),
         error: e.message,

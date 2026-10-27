@@ -339,6 +339,182 @@ export const WAGON_SHOTS: WagonShot[] = [
   { id: '10', runs: 6, shotName: 'Helicopter over Long-on', distanceMeters: 102, angleRad: Math.PI * 0.6, color: 0xf59e0b, height: 11.0, batsman: 'MS Dhoni' },
 ];
 
+export const BOUNDARY_RADIUS = 38.0;
+
+export interface BoundaryShot {
+  id: string;
+  name: string;
+  batsman: string;
+  shotType: string;
+  speedKmh: number;
+  expectedOutcome: 'FOUR' | 'SIX';
+  curve: THREE.Vector3[];
+  description: string;
+}
+
+export interface BoundaryCollisionInfo {
+  hasCollided: boolean;
+  contactPoint: { x: number; y: number; z: number };
+  horizontalDistance: number;
+  elevationAtCrossing: number;
+  crossingProgress: number;
+  angleDeg: number;
+  sectorName: string;
+  isGroundBoundary: boolean;
+  runs: 4 | 6;
+  badge: string;
+  title: string;
+  description: string;
+  collisionType: 'ROPE_STRIKE_FOUR' | 'AERIAL_CLEARANCE_SIX';
+}
+
+/**
+ * Resolves cricket stadium fielding sector name from polar angle in radians.
+ */
+export function getBoundarySectorName(angleRad: number): string {
+  let deg = (angleRad * (180 / Math.PI)) % 360;
+  if (deg < 0) deg += 360;
+
+  if (deg >= 22.5 && deg < 67.5) return 'Deep Extra Cover';
+  if (deg >= 67.5 && deg < 112.5) return 'Long Off';
+  if (deg >= 112.5 && deg < 157.5) return 'Long On';
+  if (deg >= 157.5 && deg < 202.5) return 'Deep Mid-Wicket';
+  if (deg >= 202.5 && deg < 247.5) return 'Deep Square Leg';
+  if (deg >= 247.5 && deg < 292.5) return 'Deep Fine Leg';
+  if (deg >= 292.5 && deg < 337.5) return 'Third Man';
+  return 'Deep Point / Backward Point';
+}
+
+/**
+ * Calculates trajectory intersection and collision telemetry with the 3D stadium boundary rope (R = 38.0m).
+ */
+export function checkBoundaryCollision(
+  curvePoints: THREE.Vector3[],
+  boundaryRadius: number = BOUNDARY_RADIUS
+): BoundaryCollisionInfo | null {
+  if (!curvePoints || curvePoints.length < 2) return null;
+
+  const spline = new THREE.CatmullRomCurve3(curvePoints);
+  const samples = 80;
+
+  for (let i = 0; i <= samples; i++) {
+    const t = i / samples;
+    const pt = spline.getPoint(t);
+    const horizDist = Math.sqrt(pt.x * pt.x + pt.z * pt.z);
+
+    if (horizDist >= boundaryRadius) {
+      const angleRad = Math.atan2(pt.z, pt.x);
+      const angleDeg = ((angleRad * 180) / Math.PI + 360) % 360;
+      const sectorName = getBoundarySectorName(angleRad);
+      const isGround = pt.y <= 0.40;
+
+      return {
+        hasCollided: true,
+        contactPoint: {
+          x: Number((boundaryRadius * Math.cos(angleRad)).toFixed(2)),
+          y: Number(pt.y.toFixed(2)),
+          z: Number((boundaryRadius * Math.sin(angleRad)).toFixed(2)),
+        },
+        horizontalDistance: Number(horizDist.toFixed(2)),
+        elevationAtCrossing: Number(pt.y.toFixed(2)),
+        crossingProgress: Number(t.toFixed(3)),
+        angleDeg: Number(angleDeg.toFixed(1)),
+        sectorName,
+        isGroundBoundary: isGround,
+        runs: isGround ? 4 : 6,
+        badge: isGround ? 'BOUNDARY · 4 RUNS' : 'MAXIMUM · 6 RUNS',
+        title: isGround ? 'Ground Boundary Rope Impact' : 'Aerial Boundary Rope Clearance',
+        description: isGround
+          ? `Ball struck the 38.0m boundary rope cushion at ${sectorName} (${angleDeg.toFixed(0)}°) at ${pt.y.toFixed(2)}m elevation. 4 runs scored.`
+          : `Ball sailed over the 38.0m boundary rope at ${sectorName} at ${pt.y.toFixed(1)}m elevation into the crowd. 6 runs scored.`,
+        collisionType: isGround ? 'ROPE_STRIKE_FOUR' : 'AERIAL_CLEARANCE_SIX',
+      };
+    }
+  }
+
+  return null;
+}
+
+export const BOUNDARY_SHOTS: BoundaryShot[] = [
+  {
+    id: 'cover_drive_four',
+    name: '138 km/h Cover Drive (Rope Impact)',
+    batsman: 'Virat Kohli',
+    shotType: 'Ground Stroke',
+    speedKmh: 138,
+    expectedOutcome: 'FOUR',
+    description: 'Crisp cover drive along the turf striking the deep extra cover boundary rope cushion.',
+    curve: [
+      new THREE.Vector3(0, 0.4, 10.0),
+      new THREE.Vector3(12.0, 0.12, 17.5),
+      new THREE.Vector3(22.0, 0.08, 24.0),
+      new THREE.Vector3(27.0, 0.08, 27.0), // Hits boundary rope R=38m at 45 deg
+    ],
+  },
+  {
+    id: 'straight_drive_four',
+    name: '144 km/h Straight Drive (Long-Off Rope)',
+    batsman: 'KL Rahul',
+    shotType: 'Ground Stroke',
+    speedKmh: 144,
+    expectedOutcome: 'FOUR',
+    description: 'Bullet tracer down the ground past non-striker hitting Long-Off boundary padding.',
+    curve: [
+      new THREE.Vector3(0, 0.4, 10.0),
+      new THREE.Vector3(0.0, 0.12, -2.0),
+      new THREE.Vector3(0.0, 0.08, -20.0),
+      new THREE.Vector3(0.0, 0.08, -38.2), // Hits Long-off boundary rope
+    ],
+  },
+  {
+    id: 'square_cut_four',
+    name: '136 km/h Backward Point Cut (Rope Strike)',
+    batsman: 'Rishabh Pant',
+    shotType: 'Ground Stroke',
+    speedKmh: 136,
+    expectedOutcome: 'FOUR',
+    description: 'Fierce cut beating backward point into deep point boundary rope.',
+    curve: [
+      new THREE.Vector3(0, 0.4, 10.0),
+      new THREE.Vector3(14.0, 0.12, 9.0),
+      new THREE.Vector3(26.0, 0.08, 7.5),
+      new THREE.Vector3(38.1, 0.08, 5.8), // Hits Deep Point boundary
+    ],
+  },
+  {
+    id: 'pull_shot_six',
+    name: '142 km/h Pull Shot Maximum (Clears Rope)',
+    batsman: 'Rohit Sharma',
+    shotType: 'Aerial Maximum',
+    speedKmh: 142,
+    expectedOutcome: 'SIX',
+    description: 'Soaring pull shot clearing the deep mid-wicket boundary rope by 4.8 meters.',
+    curve: [
+      new THREE.Vector3(0, 0.4, 10.0),
+      new THREE.Vector3(-12.0, 5.8, 17.0),
+      new THREE.Vector3(-22.0, 7.4, 23.0),
+      new THREE.Vector3(-32.0, 4.8, 30.0), // Clears 38m rope at ~4.8m elevation
+      new THREE.Vector3(-38.0, 2.2, 36.0),
+    ],
+  },
+  {
+    id: 'helicopter_six',
+    name: '152 km/h Helicopter Six (Over Long-On)',
+    batsman: 'MS Dhoni',
+    shotType: 'Aerial Maximum',
+    speedKmh: 152,
+    expectedOutcome: 'SIX',
+    description: 'Trademark helicopter whip clearing the long-on boundary rope by 6.2 meters.',
+    curve: [
+      new THREE.Vector3(0, 0.4, 10.0),
+      new THREE.Vector3(-6.0, 7.2, -5.0),
+      new THREE.Vector3(-12.0, 9.5, -20.0),
+      new THREE.Vector3(-15.0, 6.2, -37.0), // Clears rope at Long-On
+      new THREE.Vector3(-18.0, 3.0, -44.0),
+    ],
+  },
+];
+
 /**
  * Creates high-resolution procedural grass & soil shader material for the 22-yard cricket pitch.
  * Blends compacted clay center, longitudinal grass fibers, mowing lawn stripes, bowler/batsman
@@ -474,7 +650,7 @@ export function createPitchGrassMaterial(options?: {
 
 export function CricketPitch3D() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [activeMode, setActiveMode] = useState<'pitch' | 'trajectory' | 'wagon'>('trajectory');
+  const [activeMode, setActiveMode] = useState<'pitch' | 'trajectory' | 'wagon' | 'boundary'>('trajectory');
   const [selectedDelivery, setSelectedDelivery] = useState<DeliveryPreset>(DELIVERIES[0]);
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [isDockCollapsed, setIsDockCollapsed] = useState<boolean>(false);
@@ -486,11 +662,22 @@ export function CricketPitch3D() {
   const [showImpactOverlay, setShowImpactOverlay] = useState<boolean>(true);
   const [isImpactNear, setIsImpactNear] = useState<boolean>(false);
 
+  // Boundary 3D & Collision States
+  const [selectedBoundaryShot, setSelectedBoundaryShot] = useState<BoundaryShot>(BOUNDARY_SHOTS[0]);
+  const [boundaryCollisionInfo, setBoundaryCollisionInfo] = useState<BoundaryCollisionInfo | null>(() =>
+    checkBoundaryCollision(BOUNDARY_SHOTS[0].curve)
+  );
+  const [isBoundaryColliding, setIsBoundaryColliding] = useState<boolean>(false);
+
   // Mutable refs to prevent stale closure in animation loop
-  const activeModeRef = useRef<'pitch' | 'trajectory' | 'wagon'>(activeMode);
+  const activeModeRef = useRef<'pitch' | 'trajectory' | 'wagon' | 'boundary'>(activeMode);
   activeModeRef.current = activeMode;
   const selectedDeliveryRef = useRef<DeliveryPreset>(selectedDelivery);
   selectedDeliveryRef.current = selectedDelivery;
+  const selectedBoundaryShotRef = useRef<BoundaryShot>(selectedBoundaryShot);
+  selectedBoundaryShotRef.current = selectedBoundaryShot;
+  const isBoundaryCollidingRef = useRef<boolean>(isBoundaryColliding);
+  isBoundaryCollidingRef.current = isBoundaryColliding;
   const isPlayingRef = useRef<boolean>(isPlaying);
   isPlayingRef.current = isPlaying;
   const isSlowMoRef = useRef<boolean>(isSlowMo);
@@ -502,6 +689,11 @@ export function CricketPitch3D() {
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const boundaryRopeMeshRef = useRef<THREE.Mesh | null>(null);
+  const boundaryLedStripRef = useRef<THREE.Mesh | null>(null);
+  const boundaryWedgesGroupRef = useRef<THREE.Group | null>(null);
+  const boundaryImpactBeaconGroupRef = useRef<THREE.Group | null>(null);
+  const boundaryTrajectoryLineRef = useRef<THREE.Line | null>(null);
   const animFrameRef = useRef<number | null>(null);
 
   // Hawkeye objects
@@ -645,6 +837,35 @@ export function CricketPitch3D() {
         );
       }
     }
+  }, []);
+
+  // Re-build or update Boundary Trajectory Beam
+  const updateBoundaryBeam = useCallback((shot: BoundaryShot) => {
+    if (!sceneRef.current) return;
+    const scene = sceneRef.current;
+
+    if (boundaryTrajectoryLineRef.current) {
+      scene.remove(boundaryTrajectoryLineRef.current);
+    }
+
+    let curve = curvesCacheRef.current.get(shot.id);
+    if (!curve) {
+      curve = new THREE.CatmullRomCurve3(shot.curve);
+      curvesCacheRef.current.set(shot.id, curve);
+    }
+
+    const points = curve.getPoints(50);
+    const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+    const isSix = shot.expectedOutcome === 'SIX';
+    const lineMat = new THREE.LineBasicMaterial({
+      color: isSix ? 0xa855f7 : 0x10b981,
+      linewidth: 3,
+      transparent: true,
+      opacity: 0.9,
+    });
+    const line = new THREE.Line(lineGeo, lineMat);
+    scene.add(line);
+    boundaryTrajectoryLineRef.current = line;
   }, []);
 
   const resetBails = () => {
@@ -820,17 +1041,108 @@ export function CricketPitch3D() {
     field.receiveShadow = !isSoftwareGl;
     scene.add(field);
 
-    // Boundary Rope
-    const boundaryGeo = new THREE.TorusGeometry(38, 0.22, 12, 64);
+    // 6. Dynamic 3D Braided Boundary Rope System & Foam Sponsor Wedges (R = 38.0m)
+    // Procedural braided rope texture: alternating crimson & white spiral coils with twine cord striations
+    const ropeCanvas = document.createElement('canvas');
+    ropeCanvas.width = 512;
+    ropeCanvas.height = 128;
+    const ropeCtx = ropeCanvas.getContext('2d');
+    if (ropeCtx) {
+      ropeCtx.fillStyle = '#f8fafc'; // Crisp white rope cord base
+      ropeCtx.fillRect(0, 0, 512, 128);
+      ropeCtx.fillStyle = '#dc2626'; // Deep cricket red safety bands
+      for (let x = -128; x < 512 + 128; x += 32) {
+        ropeCtx.beginPath();
+        ropeCtx.moveTo(x, 0);
+        ropeCtx.lineTo(x + 64, 128);
+        ropeCtx.lineTo(x + 48, 128);
+        ropeCtx.lineTo(x - 16, 0);
+        ropeCtx.closePath();
+        ropeCtx.fill();
+      }
+      ropeCtx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
+      ropeCtx.lineWidth = 2;
+      for (let y = 0; y < 128; y += 8) {
+        ropeCtx.beginPath();
+        ropeCtx.moveTo(0, y);
+        ropeCtx.lineTo(512, y);
+        ropeCtx.stroke();
+      }
+    }
+    const ropeTexture = new THREE.CanvasTexture(ropeCanvas);
+    ropeTexture.wrapS = THREE.RepeatWrapping;
+    ropeTexture.wrapT = THREE.RepeatWrapping;
+    ropeTexture.repeat.set(64, 1);
+    ropeTexture.colorSpace = THREE.SRGBColorSpace;
+
+    // High-resolution braided rope geometry (Radius 38.0m, tube thickness 0.24m, 128 perimeter segments)
+    const boundaryGeo = new THREE.TorusGeometry(BOUNDARY_RADIUS, 0.24, 16, 128);
     const boundaryMat = new THREE.MeshStandardMaterial({
-      color: 0xef4444,
-      roughness: 0.5,
-      metalness: 0.2,
+      map: ropeTexture,
+      roughness: 0.55,
+      metalness: 0.15,
     });
     const boundaryRope = new THREE.Mesh(boundaryGeo, boundaryMat);
     boundaryRope.rotation.x = Math.PI / 2;
-    boundaryRope.position.y = 0.05;
+    boundaryRope.position.y = 0.08;
+    boundaryRope.receiveShadow = !isSoftwareGl;
+    boundaryRope.castShadow = !isSoftwareGl;
     scene.add(boundaryRope);
+    boundaryRopeMeshRef.current = boundaryRope;
+
+    // Dynamic LED Pulse Under-Glow Strip
+    const ledGeo = new THREE.TorusGeometry(BOUNDARY_RADIUS, 0.06, 8, 96);
+    const ledMat = new THREE.MeshBasicMaterial({
+      color: 0x00f0ff,
+      transparent: true,
+      opacity: 0.4,
+    });
+    const boundaryLed = new THREE.Mesh(ledGeo, ledMat);
+    boundaryLed.rotation.x = Math.PI / 2;
+    boundaryLed.position.y = 0.03;
+    scene.add(boundaryLed);
+    boundaryLedStripRef.current = boundaryLed;
+
+    // 36 Triangular 3D Foam Advertising Wedges (Boundary Toboggans)
+    const wedgesGroup = new THREE.Group();
+    const wedgeGeo = new THREE.BoxGeometry(2.4, 0.36, 0.42);
+    const sponsorColors = [0x0f172a, 0x047857, 0x1d4ed8, 0xb91c1c];
+
+    for (let i = 0; i < 36; i++) {
+      const angle = (i * 2 * Math.PI) / 36;
+      const x = BOUNDARY_RADIUS * Math.cos(angle);
+      const z = BOUNDARY_RADIUS * Math.sin(angle);
+
+      const wedgeMat = new THREE.MeshStandardMaterial({
+        color: sponsorColors[i % sponsorColors.length],
+        roughness: 0.6,
+        metalness: 0.1,
+      });
+      const wedge = new THREE.Mesh(wedgeGeo, wedgeMat);
+      wedge.position.set(x, 0.18, z);
+      wedge.rotation.y = -angle + Math.PI / 2;
+      wedge.castShadow = !isSoftwareGl;
+      wedgesGroup.add(wedge);
+    }
+    scene.add(wedgesGroup);
+    boundaryWedgesGroupRef.current = wedgesGroup;
+
+    // Boundary Impact Shockwave Beacon Group
+    const bImpactGroup = new THREE.Group();
+    const bCoreGeo = new THREE.SphereGeometry(0.35, 16, 16);
+    const bCoreMat = new THREE.MeshBasicMaterial({ color: 0xef4444, transparent: true, opacity: 0.95 });
+    const bCore = new THREE.Mesh(bCoreGeo, bCoreMat);
+    bImpactGroup.add(bCore);
+
+    const bRingGeo = new THREE.RingGeometry(0.2, 1.4, 32);
+    const bRingMat = new THREE.MeshBasicMaterial({ color: 0xff3b30, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
+    const bRing = new THREE.Mesh(bRingGeo, bRingMat);
+    bRing.rotation.x = -Math.PI / 2;
+    bImpactGroup.add(bRing);
+
+    bImpactGroup.visible = false;
+    scene.add(bImpactGroup);
+    boundaryImpactBeaconGroupRef.current = bImpactGroup;
 
     // 30-Yard Circle
     const circle30Geo = new THREE.RingGeometry(18.5, 18.7, 48);
@@ -847,15 +1159,28 @@ export function CricketPitch3D() {
 
     // 22-Yard Central Pitch (Scaled 20.12m x 3.05m)
     const pitchGeo = new THREE.BoxGeometry(3.2, 0.05, 20.2);
-    const pitchMat = new THREE.MeshStandardMaterial({
-      color: 0xc49a45,
-      roughness: 0.9,
+    const pitchBaseMat = new THREE.MeshStandardMaterial({
+      color: 0x936838, // Subsurface compacted clay foundation
+      roughness: 0.95,
       metalness: 0.02,
     });
-    const pitch = new THREE.Mesh(pitchGeo, pitchMat);
-    pitch.position.y = 0.02;
-    pitch.receiveShadow = !isSoftwareGl;
-    scene.add(pitch);
+    const pitchBase = new THREE.Mesh(pitchGeo, pitchBaseMat);
+    pitchBase.position.y = 0.02;
+    pitchBase.receiveShadow = !isSoftwareGl;
+    scene.add(pitchBase);
+
+    // High-Resolution Procedural Grass & Soil Playing Surface Layer
+    const pitchGrassMat = createPitchGrassMaterial({
+      sunDirection: keyLight.position.clone().normalize(),
+    });
+    pitchGrassShaderRef.current = pitchGrassMat;
+
+    const pitchSurfaceGeo = new THREE.PlaneGeometry(3.2, 20.2, 48, 96);
+    const pitchSurface = new THREE.Mesh(pitchSurfaceGeo, pitchGrassMat);
+    pitchSurface.rotation.x = -Math.PI / 2;
+    pitchSurface.position.y = 0.046;
+    pitchSurface.receiveShadow = !isSoftwareGl;
+    scene.add(pitchSurface);
 
     // Crease Markings
     const createCreaseMarking = (width: number, length: number, x: number, z: number) => {
@@ -1260,6 +1585,74 @@ export function CricketPitch3D() {
         }
       }
 
+      // Boundary Shot Trajectory Physics & Dynamic 3D Rope Collision Detection
+      if (ballMeshRef.current && currentMode === 'boundary') {
+        const curBoundaryShot = selectedBoundaryShotRef.current;
+        if (currentPlaying) {
+          const speed = curBoundaryShot.speedKmh || 140;
+          const speedFactor = isSlow ? 0.22 : 0.65;
+          ballProgressRef.current += deltaTime * (speed / 140) * speedFactor;
+          if (ballProgressRef.current >= 1.0) {
+            ballProgressRef.current = 0;
+          }
+        }
+
+        const t = Math.max(
+          0,
+          Math.min(1, isNaN(ballProgressRef.current) ? 0 : ballProgressRef.current)
+        );
+
+        let activeBoundaryCurve = curvesCacheRef.current.get(curBoundaryShot.id);
+        if (!activeBoundaryCurve) {
+          activeBoundaryCurve = new THREE.CatmullRomCurve3(curBoundaryShot.curve);
+          curvesCacheRef.current.set(curBoundaryShot.id, activeBoundaryCurve);
+        }
+
+        try {
+          const pt = activeBoundaryCurve.getPoint(t);
+          if (pt && !isNaN(pt.x)) {
+            ballMeshRef.current.position.copy(pt);
+            ballMeshRef.current.rotation.x += isSlow ? 0.08 : 0.25;
+            ballMeshRef.current.rotation.z += isSlow ? 0.05 : 0.15;
+
+            // Collision check with stadium boundary perimeter (R = 38.0m)
+            const horizDist = Math.sqrt(pt.x * pt.x + pt.z * pt.z);
+            const hasHitRope = horizDist >= BOUNDARY_RADIUS;
+
+            setIsBoundaryColliding(hasHitRope);
+            isBoundaryCollidingRef.current = hasHitRope;
+
+            if (boundaryImpactBeaconGroupRef.current) {
+              if (hasHitRope) {
+                const angle = Math.atan2(pt.z, pt.x);
+                boundaryImpactBeaconGroupRef.current.position.set(
+                  BOUNDARY_RADIUS * Math.cos(angle),
+                  Math.max(0.12, pt.y),
+                  BOUNDARY_RADIUS * Math.sin(angle)
+                );
+                boundaryImpactBeaconGroupRef.current.visible = true;
+
+                // Dynamic LED perimeter glow pulses on collision
+                if (boundaryLedStripRef.current) {
+                  const ledMat = boundaryLedStripRef.current.material as THREE.MeshBasicMaterial;
+                  ledMat.color.setHex(curBoundaryShot.expectedOutcome === 'SIX' ? 0xa855f7 : 0xef4444);
+                  ledMat.opacity = 0.95;
+                }
+              } else {
+                boundaryImpactBeaconGroupRef.current.visible = false;
+                if (boundaryLedStripRef.current) {
+                  const ledMat = boundaryLedStripRef.current.material as THREE.MeshBasicMaterial;
+                  ledMat.color.setHex(0x00f0ff);
+                  ledMat.opacity = 0.35;
+                }
+              }
+            }
+          }
+        } catch {
+          // Graceful fallback
+        }
+      }
+
       // Smooth camera interpolation
       if (isTransitioningCameraRef.current && camera) {
         camera.position.lerp(targetCamPosRef.current, 0.08);
@@ -1328,13 +1721,19 @@ export function CricketPitch3D() {
       pitchDimensionGroupRef.current.visible = activeMode === 'pitch';
     }
     if (ballMeshRef.current) {
-      ballMeshRef.current.visible = activeMode === 'trajectory';
+      ballMeshRef.current.visible = activeMode === 'trajectory' || activeMode === 'boundary';
     }
     if (bounceMarkerRef.current) {
       bounceMarkerRef.current.visible = activeMode === 'trajectory';
     }
     if (impactBeaconGroupRef.current) {
       impactBeaconGroupRef.current.visible = false;
+    }
+    if (boundaryImpactBeaconGroupRef.current) {
+      boundaryImpactBeaconGroupRef.current.visible = false;
+    }
+    if (boundaryTrajectoryLineRef.current) {
+      boundaryTrajectoryLineRef.current.visible = activeMode === 'boundary';
     }
     if (hawkeyePreLineRef.current) {
       hawkeyePreLineRef.current.visible = activeMode === 'trajectory';
@@ -1350,6 +1749,15 @@ export function CricketPitch3D() {
       handleSelectCameraView('birds_eye');
     } else if (activeMode === 'trajectory') {
       handleSelectCameraView('bowlers_end');
+    } else if (activeMode === 'boundary') {
+      sounds.playClick();
+      updateBoundaryBeam(selectedBoundaryShot);
+      ballProgressRef.current = 0;
+      cameraSphericalRef.current = { radius: 34, theta: Math.PI * 0.75, phi: 1.15 };
+      cameraTargetRef.current = new THREE.Vector3(0, 0.5, 0);
+      targetCamPosRef.current.set(20, 14, 24);
+      targetCamLookAtRef.current.set(0, 0.5, 0);
+      isTransitioningCameraRef.current = true;
     } else if (activeMode === 'pitch') {
       sounds.playClick();
       cameraSphericalRef.current = { radius: 22, theta: Math.PI / 2, phi: 1.35 };
@@ -1358,7 +1766,19 @@ export function CricketPitch3D() {
       targetCamLookAtRef.current.set(0, 0.5, 0);
       isTransitioningCameraRef.current = true;
     }
-  }, [activeMode]);
+  }, [activeMode, updateBoundaryBeam, selectedBoundaryShot]);
+
+  // Boundary shot change handler
+  const handleSelectBoundaryShot = (shot: BoundaryShot) => {
+    setSelectedBoundaryShot(shot);
+    selectedBoundaryShotRef.current = shot;
+    setBoundaryCollisionInfo(checkBoundaryCollision(shot.curve));
+    ballProgressRef.current = 0;
+    setIsSlowMo(false);
+    isSlowMoRef.current = false;
+    updateBoundaryBeam(shot);
+    sounds.playClick();
+  };
 
   // Delivery change handler
   const handleSelectDelivery = (delivery: DeliveryPreset) => {
@@ -1439,8 +1859,136 @@ export function CricketPitch3D() {
             <Layers className="w-3.5 h-3.5" />
             <span>Pitch Dimensions</span>
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveMode('boundary');
+              handleSelectBoundaryShot(selectedBoundaryShot);
+            }}
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all ${
+              activeMode === 'boundary'
+                ? 'bg-rose-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <ShieldAlert className="w-3.5 h-3.5" />
+            <span>Boundary 3D & Collision</span>
+          </button>
         </div>
       </div>
+
+      {/* Dynamic 3D Boundary Collision Telemetry Panel (Left Flank) */}
+      {activeMode === 'boundary' && (
+        <div className="absolute top-16 left-4 z-10 bg-[#0b0f19]/95 backdrop-blur-md p-3.5 rounded-xl border border-slate-800 text-xs text-slate-300 w-80 shadow-2xl pointer-events-auto">
+          <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800/80">
+            <div>
+              <div className="flex items-center gap-1.5 text-[10px] uppercase font-mono font-bold tracking-wider text-rose-400">
+                <ShieldAlert className="w-3 h-3 text-rose-400" />
+                <span>3D Boundary Collision Radar</span>
+              </div>
+              <div className="text-sm font-bold text-white">{selectedBoundaryShot.batsman}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-base font-extrabold font-sports text-rose-400 tabular-nums">
+                {selectedBoundaryShot.speedKmh} <span className="text-[10px] font-sans font-normal text-slate-400">km/h</span>
+              </div>
+              <div className="text-[10px] font-mono text-slate-400">{selectedBoundaryShot.shotType}</div>
+            </div>
+          </div>
+
+          {/* Real-time Collision Status Indicator */}
+          <div className={`p-2.5 rounded-lg border mb-2.5 transition-colors ${
+            isBoundaryColliding
+              ? selectedBoundaryShot.expectedOutcome === 'SIX'
+                ? 'bg-purple-950/70 border-purple-500/70 text-purple-200'
+                : 'bg-rose-950/70 border-rose-500/70 text-rose-200'
+              : 'bg-slate-900/80 border-slate-800 text-slate-400'
+          }`}>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold flex items-center gap-1.5">
+                <Sparkles className={`w-3.5 h-3.5 ${isBoundaryColliding ? 'text-amber-300 animate-spin' : 'text-slate-500'}`} />
+                <span>Boundary Collision Status</span>
+              </span>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider ${
+                isBoundaryColliding
+                  ? 'bg-rose-500 text-white shadow-sm'
+                  : 'bg-slate-800 text-slate-400'
+              }`}>
+                {isBoundaryColliding ? 'ROPE CONTACT ACTIVE' : 'IN PLAY'}
+              </span>
+            </div>
+            <div className="text-[11px] mt-1 font-mono">
+              {isBoundaryColliding ? (
+                <span className="text-amber-300 font-bold">
+                  💥 Ball contacting stadium perimeter at 38.0m!
+                </span>
+              ) : (
+                <span>Tracking ball trajectory towards perimeter rope (38.0m radius)...</span>
+              )}
+            </div>
+          </div>
+
+          {/* Collision Telemetry Mat */}
+          {boundaryCollisionInfo && (
+            <div className="bg-slate-900/80 rounded-lg p-2.5 border border-slate-800 space-y-1.5 mb-2.5 text-[11px]">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">Perimeter Radius</span>
+                <span className="font-mono font-bold text-white">38.00 m</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">Fielding Sector</span>
+                <span className="font-mono font-bold text-emerald-400">{boundaryCollisionInfo.sectorName}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">Crossing Angle</span>
+                <span className="font-mono font-bold text-slate-200">{boundaryCollisionInfo.angleDeg}°</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">Rope Elevation</span>
+                <span className={`font-mono font-bold ${boundaryCollisionInfo.isGroundBoundary ? 'text-emerald-400' : 'text-purple-400'}`}>
+                  {boundaryCollisionInfo.elevationAtCrossing} m ({boundaryCollisionInfo.isGroundBoundary ? 'Ground Cushion' : 'Aerial Clearance'})
+                </span>
+              </div>
+              <div className="flex items-center justify-between pt-1 border-t border-slate-800">
+                <span className="text-slate-400">Collision Verdict</span>
+                <span className={`font-mono font-extrabold px-1.5 py-0.5 rounded ${
+                  boundaryCollisionInfo.runs === 6 ? 'bg-purple-900/60 text-purple-300 border border-purple-500/40' : 'bg-emerald-900/60 text-emerald-300 border border-emerald-500/40'
+                }`}>
+                  {boundaryCollisionInfo.badge}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Shot Selector Quick-Pills */}
+          <div className="space-y-1.5">
+            <div className="text-[10px] uppercase font-mono font-semibold text-slate-400">
+              Select Trajectory to Simulate:
+            </div>
+            <div className="grid grid-cols-1 gap-1">
+              {BOUNDARY_SHOTS.map((shot) => (
+                <button
+                  key={shot.id}
+                  type="button"
+                  onClick={() => handleSelectBoundaryShot(shot)}
+                  className={`w-full px-2 py-1.5 rounded text-left text-[11px] font-medium transition-all flex items-center justify-between ${
+                    selectedBoundaryShot.id === shot.id
+                      ? 'bg-rose-900/50 border border-rose-500/60 text-white'
+                      : 'bg-slate-900/60 border border-slate-800 text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  <span className="truncate">{shot.name}</span>
+                  <span className={`text-[10px] font-mono px-1 rounded font-bold ${
+                    shot.expectedOutcome === 'SIX' ? 'bg-purple-900/80 text-purple-300' : 'bg-emerald-900/80 text-emerald-300'
+                  }`}>
+                    {shot.expectedOutcome === 'SIX' ? '6 RUNS' : '4 RUNS'}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Hawkeye DRS Decision Panel (Left Flank) */}
       {activeMode === 'trajectory' && (
@@ -1789,6 +2337,30 @@ export function CricketPitch3D() {
                     <span className="text-slate-500">Popping Crease:</span>{' '}
                     <span className="font-semibold text-purple-400">4 Feet (1.22m)</span>
                   </div>
+                </div>
+              )}
+
+              {/* Boundary Shots Selector (in Boundary Mode) */}
+              {activeMode === 'boundary' && (
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                  {BOUNDARY_SHOTS.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => handleSelectBoundaryShot(s)}
+                      className={`whitespace-nowrap px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${
+                        selectedBoundaryShot.id === s.id
+                          ? s.expectedOutcome === 'SIX'
+                            ? 'bg-purple-600 text-white shadow-sm'
+                            : 'bg-rose-600 text-white shadow-sm'
+                          : 'bg-slate-900/80 border border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-850'
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${s.expectedOutcome === 'SIX' ? 'bg-purple-400' : 'bg-rose-400'}`} />
+                      <span>{s.batsman.split(' ')[0]}: {s.name.split(' ')[1] || s.name}</span>
+                      <span className="text-[10px] font-mono opacity-80">({s.expectedOutcome === 'SIX' ? '6' : '4'})</span>
+                    </button>
+                  ))}
                 </div>
               )}
 
