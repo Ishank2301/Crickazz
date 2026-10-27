@@ -9,9 +9,9 @@ function cricketBackendPlugin(): Plugin {
   return {
     name: 'cricket-backend-plugin',
     configureServer(server) {
-      // 1. Explicitly serve any .wasm file with application/wasm to prevent HTML fallback
+      // 1. Explicitly serve direct .wasm file requests with application/wasm to prevent HTML fallback
       server.middlewares.use((req, res, next) => {
-        if (req.url && req.url.includes('.wasm')) {
+        if (req.url && req.url.includes('.wasm') && !req.url.includes('?') && !req.url.includes('&import')) {
           const cleanUrl = req.url.split('?')[0];
           const fileName = path.basename(cleanUrl);
           const possiblePaths = [
