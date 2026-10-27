@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Activity,
   CheckCircle2,
@@ -18,7 +18,23 @@ import {
   Flame,
   HardDrive,
   Clock,
+  Terminal,
+  FileText,
+  Trash2,
+  Copy,
+  Check,
+  Search,
+  AlertTriangle,
+  Info,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
+import {
+  subscribeToLogs,
+  getPersistentLogs,
+  clearPersistentLogs,
+  LogEntry,
+} from '../utils/logger';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -100,6 +116,14 @@ export function DiagnosticsPage() {
   });
   const [isBurstTesting, setIsBurstTesting] = useState<boolean>(false);
 
+  // Persistent logs capture state
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [logFilterLevel, setLogFilterLevel] = useState<'all' | 'error' | 'warn' | 'info' | 'log'>('all');
+  const [logSearchQuery, setLogSearchQuery] = useState<string>('');
+  const [expandedLogIds, setExpandedLogIds] = useState<Set<string>>(new Set());
+  const [copiedLogId, setCopiedLogId] = useState<string | null>(null);
+  const [copiedAll, setCopiedAll] = useState<boolean>(false);
+
   // Ref tracking for FPS measurement
   const frameCountRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(performance.now());
@@ -156,10 +180,76 @@ export function DiagnosticsPage() {
     },
   ]);
 
-  // Initial diagnostics load
+  // Initial diagnostics load & persistent log subscription
   useEffect(() => {
     refreshDiagnostics();
+    const unsub = subscribeToLogs((updatedLogs) => {
+      setLogs(updatedLogs);
+    });
+    return () => unsub();
   }, []);
+
+  const handleClearLogs = () => {
+    clearPersistentLogs();
+  };
+
+  const handleCopyAllLogs = () => {
+    const formatted = logs
+      .map(
+        (l) =>
+          `[${l.timestamp}] [${l.level.toUpperCase()}] (${l.source || 'runtime'}) ${l.message}${
+            l.stack ? `\nStack:\n${l.stack}` : ''
+          }`
+      )
+      .join('\n\n');
+    navigator.clipboard.writeText(formatted);
+    setCopiedAll(true);
+    setTimeout(() => setCopiedAll(false), 2000);
+  };
+
+  const handleCopySingleLog = (log: LogEntry) => {
+    const text = `[${log.timestamp}] [${log.level.toUpperCase()}] (${log.source || 'runtime'}) ${log.message}${log.stack ? `\n${log.stack}` : ''}`;
+    navigator.clipboard.writeText(text);
+    setCopiedLogId(log.id);
+    setTimeout(() => setCopiedLogId(null), 2000);
+  };
+
+  const toggleExpandLog = (id: string) => {
+    setExpandedLogIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleGenerateTestLogs = () => {
+    console.info('[Diagnostics Test] Verified persistent console telemetry pipeline');
+    console.warn('[Diagnostics Test] Simulated non-blocking timing alert (115ms)');
+    console.log('[Diagnostics Test] Relational database connection ready');
+    console.error('[Diagnostics Test] Simulated runtime test error for verification');
+  };
+
+  const logErrorsCount = logs.filter((l) => l.level === 'error').length;
+  const logWarnsCount = logs.filter((l) => l.level === 'warn').length;
+  const logInfoCount = logs.filter((l) => l.level === 'info' || l.level === 'log').length;
+
+  const filteredLogs = useMemo(() => {
+    return logs.filter((log) => {
+      if (logFilterLevel === 'error' && log.level !== 'error') return false;
+      if (logFilterLevel === 'warn' && log.level !== 'warn') return false;
+      if (logFilterLevel === 'info' && log.level !== 'info' && log.level !== 'log') return false;
+
+      if (logSearchQuery.trim()) {
+        const query = logSearchQuery.toLowerCase();
+        const matchesMsg = log.message.toLowerCase().includes(query);
+        const matchesSource = (log.source || '').toLowerCase().includes(query);
+        const matchesStack = log.stack ? log.stack.toLowerCase().includes(query) : false;
+        return matchesMsg || matchesSource || matchesStack;
+      }
+      return true;
+    });
+  }, [logs, logFilterLevel, logSearchQuery]);
 
   // Real-time FPS requestAnimationFrame loop
   useEffect(() => {
@@ -915,6 +1005,262 @@ export function DiagnosticsPage() {
             Click &ldquo;Run Live Benchmark&rdquo; to execute simultaneous cold vs memoized analytical queries and measure microsecond timing.
           </div>
         )}
+      </div>
+
+      {/* Persistent Browser Console & Runtime Log Capture */}
+      <div className="rounded-lg bg-[#111827] border border-slate-800 overflow-hidden shadow-sm">
+        <div className="p-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+              <Terminal className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-semibold text-slate-100">
+                  Persistent Browser Console &amp; Runtime Logs
+                </h2>
+                <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-400 font-mono">
+                  {logs.length} logged
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Real-time interception of initialization errors, warnings, and console events persisted across page reloads in localStorage.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            {logErrorsCount === 0 ? (
+              <span className="px-2.5 py-1 rounded text-xs bg-emerald-950/60 border border-emerald-800/80 text-emerald-300 font-medium flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                Initialization Clean (0 Errors)
+              </span>
+            ) : (
+              <span className="px-2.5 py-1 rounded text-xs bg-rose-950/60 border border-rose-800/80 text-rose-300 font-medium flex items-center gap-1.5 animate-pulse">
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                {logErrorsCount} Runtime {logErrorsCount === 1 ? 'Error' : 'Errors'} Detected
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Action Toolbar & Search Filters */}
+        <div className="p-3 bg-slate-900/60 border-b border-slate-800 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 text-xs">
+          {/* Level Filter Tabs */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+            <button
+              onClick={() => setLogFilterLevel('all')}
+              className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                logFilterLevel === 'all'
+                  ? 'bg-slate-700 text-slate-100 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              }`}
+            >
+              All ({logs.length})
+            </button>
+            <button
+              onClick={() => setLogFilterLevel('error')}
+              className={`px-2.5 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1 ${
+                logFilterLevel === 'error'
+                  ? 'bg-rose-900/60 border border-rose-700/80 text-rose-200 shadow-sm'
+                  : 'text-rose-400/80 hover:text-rose-300 hover:bg-rose-950/30'
+              }`}
+            >
+              <AlertTriangle className="w-3 h-3" />
+              Errors ({logErrorsCount})
+            </button>
+            <button
+              onClick={() => setLogFilterLevel('warn')}
+              className={`px-2.5 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1 ${
+                logFilterLevel === 'warn'
+                  ? 'bg-amber-900/60 border border-amber-700/80 text-amber-200 shadow-sm'
+                  : 'text-amber-400/80 hover:text-amber-300 hover:bg-amber-950/30'
+              }`}
+            >
+              <AlertTriangle className="w-3 h-3" />
+              Warnings ({logWarnsCount})
+            </button>
+            <button
+              onClick={() => setLogFilterLevel('info')}
+              className={`px-2.5 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1 ${
+                logFilterLevel === 'info'
+                  ? 'bg-sky-900/60 border border-sky-700/80 text-sky-200 shadow-sm'
+                  : 'text-sky-400/80 hover:text-sky-300 hover:bg-sky-950/30'
+              }`}
+            >
+              <Info className="w-3 h-3" />
+              Info &amp; Log ({logInfoCount})
+            </button>
+          </div>
+
+          {/* Search & Actions */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 md:w-56">
+              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={logSearchQuery}
+                onChange={(e) => setLogSearchQuery(e.target.value)}
+                placeholder="Search logs or traces..."
+                className="w-full pl-8 pr-3 py-1 rounded bg-slate-950 border border-slate-800 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+              />
+              {logSearchQuery && (
+                <button
+                  onClick={() => setLogSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-[10px]"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <button
+              onClick={handleGenerateTestLogs}
+              title="Inject test telemetry logs into the pipeline"
+              className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium text-xs flex items-center gap-1 transition-colors whitespace-nowrap"
+            >
+              <Sparkles className="w-3 h-3 text-emerald-400" />
+              <span>Simulate Logs</span>
+            </button>
+
+            <button
+              onClick={handleCopyAllLogs}
+              disabled={logs.length === 0}
+              title="Copy entire formatted log history to clipboard"
+              className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-300 border border-slate-700 font-medium text-xs flex items-center gap-1 transition-colors whitespace-nowrap"
+            >
+              {copiedAll ? (
+                <>
+                  <Check className="w-3 h-3 text-emerald-400" />
+                  <span className="text-emerald-400">Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3 h-3" />
+                  <span>Copy All</span>
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={handleClearLogs}
+              disabled={logs.length === 0}
+              title="Clear persistent logs from memory and localStorage"
+              className="px-2 py-1 rounded bg-rose-950/30 hover:bg-rose-950/60 disabled:opacity-40 text-rose-300 border border-rose-900/40 font-medium text-xs flex items-center gap-1 transition-colors whitespace-nowrap"
+            >
+              <Trash2 className="w-3 h-3" />
+              <span>Clear</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Log Entries Stream */}
+        <div className="max-h-96 overflow-y-auto divide-y divide-slate-800/60 bg-[#0d131f]">
+          {filteredLogs.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-500 space-y-1">
+              <p>No log entries found for current filter.</p>
+              <p className="text-[11px] text-slate-600">
+                Any errors or console output during app initialization are captured automatically.
+              </p>
+            </div>
+          ) : (
+            filteredLogs.map((log) => {
+              const isExpanded = expandedLogIds.has(log.id);
+              const isError = log.level === 'error';
+              const isWarn = log.level === 'warn';
+              const isInfo = log.level === 'info';
+
+              return (
+                <div
+                  key={log.id}
+                  className={`p-3 text-xs font-mono transition-colors hover:bg-slate-900/50 ${
+                    isError
+                      ? 'bg-rose-950/15'
+                      : isWarn
+                      ? 'bg-amber-950/10'
+                      : ''
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                      {/* Level badge */}
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider shrink-0 mt-0.5 ${
+                          isError
+                            ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                            : isWarn
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                            : isInfo
+                            ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
+                            : 'bg-slate-800 text-slate-400 border border-slate-700'
+                        }`}
+                      >
+                        {log.level}
+                      </span>
+
+                      {/* Timestamp */}
+                      <span className="text-slate-500 text-[11px] shrink-0 mt-0.5">
+                        {log.timestamp}
+                      </span>
+
+                      {/* Source badge */}
+                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-800/80 text-slate-400 border border-slate-700/50 shrink-0 mt-0.5">
+                        {log.source}
+                      </span>
+
+                      {/* Message content */}
+                      <div className="text-slate-200 text-xs break-all leading-relaxed flex-1">
+                        {log.message}
+                      </div>
+                    </div>
+
+                    {/* Actions: Copy & Expand */}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => handleCopySingleLog(log)}
+                        title="Copy log entry"
+                        className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+                      >
+                        {copiedLogId === log.id ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+
+                      {log.stack && (
+                        <button
+                          onClick={() => toggleExpandLog(log.id)}
+                          title="Toggle stack trace"
+                          className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors flex items-center gap-0.5 text-[11px]"
+                        >
+                          {isExpanded ? (
+                            <ChevronUp className="w-3.5 h-3.5" />
+                          ) : (
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Expandable Stack Trace */}
+                  {isExpanded && log.stack && (
+                    <div className="mt-2.5 pt-2 border-t border-slate-800/80">
+                      <div className="text-[10px] uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1">
+                        <FileText className="w-3 h-3 text-slate-500" />
+                        <span>Stack Trace</span>
+                      </div>
+                      <pre className="p-2.5 rounded bg-slate-950 border border-slate-800/90 text-[11px] text-slate-400 overflow-x-auto whitespace-pre leading-relaxed select-text">
+                        {log.stack}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
 
       {/* Automated Diagnostic Test Suite Matrix */}
