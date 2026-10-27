@@ -9,7 +9,7 @@
     "lint": "tsc --noEmit",
     "test": "tsx tests/run-all-tests.ts",
     "start": "tsx server.ts",
-    "preview": "vite preview --port 3000"
+    "preview": "vite preview --host 0.0.0.0 --port 3000"
   },
   "dependencies": {
     "@google/genai": "^2.30.0",

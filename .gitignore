@@ -6,3 +6,4 @@ dist-ssr
 .aistudio
 bun.lock
 public/assets/
+.playwright-cli

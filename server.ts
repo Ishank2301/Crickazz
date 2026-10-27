@@ -125,10 +125,33 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // If dist not built yet
+  // If dist not built yet, render styled dark diagnostic status page
   res.statusCode = 503;
-  res.setHeader('Content-Type', 'text/plain');
-  res.end('Application is building or dist directory not found. Run npm run build.');
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.end(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Cricbuzz LiveStats: Building Application</title>
+  <style>
+    body { background-color: #0b0f19; color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
+    .box { max-width: 480px; width: 100%; background: #111827; border: 1px solid #1e293b; border-radius: 12px; padding: 24px; text-align: center; }
+    .spinner { width: 32px; height: 32px; border: 3px solid #1e293b; border-top-color: #10b981; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    h1 { font-size: 18px; margin: 0 0 8px; color: #ffffff; }
+    p { font-size: 13px; color: #94a3b8; line-height: 1.5; margin: 0 0 16px; }
+    code { display: block; background: #070b13; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 12px; color: #10b981; text-align: left; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="spinner"></div>
+    <h1>Application Build In Progress</h1>
+    <p>The production distribution directory was not detected. Please run the build command:</p>
+    <code>npm run build &amp;&amp; npm start</code>
+  </div>
+</body>
+</html>`);
 });
 
 function serveFile(filePath: string, res: http.ServerResponse) {
