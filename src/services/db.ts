@@ -1,5 +1,4 @@
 import initSqlJs, { Database } from 'sql.js';
-import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 
 export interface QueryResult {
   columns: string[];
@@ -68,10 +67,8 @@ export async function fetchValidWasmBinary(): Promise<ArrayBuffer> {
   const candidateUrls = [
     '/sql-wasm.wasm',
     '/sql-wasm-browser.wasm',
-    sqlWasmUrl,
-    'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.12.0/sql-wasm.wasm',
-    'https://cdn.jsdelivr.net/npm/sql.js@1.12.0/dist/sql-wasm.wasm',
-    'https://unpkg.com/sql.js@1.12.0/dist/sql-wasm.wasm',
+    'https://cdn.jsdelivr.net/npm/sql.js@1.15.1/dist/sql-wasm.wasm',
+    'https://unpkg.com/sql.js@1.15.1/dist/sql-wasm.wasm',
   ];
 
   for (const url of candidateUrls) {
