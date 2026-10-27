@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import {
   RotateCcw,
@@ -9,13 +9,14 @@ import {
   Layers,
   ChevronDown,
   ChevronUp,
-  Maximize2,
-  Wind,
   Target,
-  Sparkles,
   Camera,
   UserCheck,
-  Video,
+  CheckCircle2,
+  XCircle,
+  HelpCircle,
+  Activity,
+  Maximize2,
 } from 'lucide-react';
 import { sounds } from '../utils/audio';
 
@@ -61,7 +62,17 @@ export const PRESET_CAMERA_VIEWS: CameraViewConfig[] = [
   },
 ];
 
-interface DeliveryPreset {
+export interface DeliveryDrs {
+  pitching: 'IN LINE' | 'OUTSIDE OFF' | 'OUTSIDE LEG';
+  impact: 'IN LINE' | 'OUTSIDE OFF' | 'UMPIRE CALL';
+  wickets: 'HITTING' | 'MISSING' | 'UMPIRE CALL';
+  verdict: 'OUT' | 'NOT OUT';
+  deviation: string;
+  releaseHeight: string;
+  bounceHeight: string;
+}
+
+export interface DeliveryPreset {
   id: string;
   name: string;
   speedKmh: number;
@@ -71,9 +82,10 @@ interface DeliveryPreset {
   curve: THREE.Vector3[];
   bounceIndex: number;
   hitStumps: boolean;
+  drs: DeliveryDrs;
 }
 
-interface WagonShot {
+export interface WagonShot {
   id: string;
   runs: number;
   shotName: string;
@@ -84,7 +96,7 @@ interface WagonShot {
   batsman: string;
 }
 
-const DELIVERIES: DeliveryPreset[] = [
+export const DELIVERIES: DeliveryPreset[] = [
   {
     id: 'outswinger',
     name: '144 km/h Lethal Outswinger',
@@ -101,6 +113,15 @@ const DELIVERIES: DeliveryPreset[] = [
     ],
     bounceIndex: 2,
     hitStumps: false,
+    drs: {
+      pitching: 'IN LINE',
+      impact: 'OUTSIDE OFF',
+      wickets: 'MISSING',
+      verdict: 'NOT OUT',
+      deviation: '+2.4° Away Seam',
+      releaseHeight: '2.10m',
+      bounceHeight: '0.65m',
+    },
   },
   {
     id: 'yorker',
@@ -118,6 +139,15 @@ const DELIVERIES: DeliveryPreset[] = [
     ],
     bounceIndex: 2,
     hitStumps: true,
+    drs: {
+      pitching: 'IN LINE',
+      impact: 'IN LINE',
+      wickets: 'HITTING',
+      verdict: 'OUT',
+      deviation: '-3.1° Inswing',
+      releaseHeight: '2.15m',
+      bounceHeight: '0.35m',
+    },
   },
   {
     id: 'bouncer',
@@ -135,6 +165,15 @@ const DELIVERIES: DeliveryPreset[] = [
     ],
     bounceIndex: 2,
     hitStumps: false,
+    drs: {
+      pitching: 'IN LINE',
+      impact: 'IN LINE',
+      wickets: 'MISSING',
+      verdict: 'NOT OUT',
+      deviation: '+1.1° Bounce Lift',
+      releaseHeight: '2.20m',
+      bounceHeight: '1.60m',
+    },
   },
   {
     id: 'googly',
@@ -152,6 +191,15 @@ const DELIVERIES: DeliveryPreset[] = [
     ],
     bounceIndex: 2,
     hitStumps: true,
+    drs: {
+      pitching: 'OUTSIDE OFF',
+      impact: 'IN LINE',
+      wickets: 'HITTING',
+      verdict: 'OUT',
+      deviation: '-4.6° Sharp Turn',
+      releaseHeight: '1.90m',
+      bounceHeight: '0.50m',
+    },
   },
   {
     id: 'offbreak',
@@ -169,10 +217,19 @@ const DELIVERIES: DeliveryPreset[] = [
     ],
     bounceIndex: 2,
     hitStumps: false,
+    drs: {
+      pitching: 'OUTSIDE OFF',
+      impact: 'IN LINE',
+      wickets: 'UMPIRE CALL',
+      verdict: 'NOT OUT',
+      deviation: '+3.8° Drift & Spin',
+      releaseHeight: '2.00m',
+      bounceHeight: '0.60m',
+    },
   },
 ];
 
-const WAGON_SHOTS: WagonShot[] = [
+export const WAGON_SHOTS: WagonShot[] = [
   { id: '1', runs: 6, shotName: 'Cover Drive Loft', distanceMeters: 88, angleRad: -Math.PI * 0.65, color: 0xa855f7, height: 8.5, batsman: 'Virat Kohli' },
   { id: '2', runs: 6, shotName: 'Pull over Mid-Wicket', distanceMeters: 94, angleRad: Math.PI * 0.45, color: 0xa855f7, height: 9.2, batsman: 'Rohit Sharma' },
   { id: '3', runs: 4, shotName: 'Punch through Extra Cover', distanceMeters: 74, angleRad: -Math.PI * 0.8, color: 0x10b981, height: 0.5, batsman: 'Virat Kohli' },
@@ -191,24 +248,39 @@ export function CricketPitch3D() {
   const [selectedDelivery, setSelectedDelivery] = useState<DeliveryPreset>(DELIVERIES[0]);
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [isDockCollapsed, setIsDockCollapsed] = useState<boolean>(false);
-  const [selectedShot, setSelectedShot] = useState<WagonShot | null>(null);
-  const [cameraPreset, setCameraPreset] = useState<'bowler' | 'batsman' | 'side' | 'overhead'>('bowler');
   const [activeCameraView, setActiveCameraView] = useState<PresetCameraView>('bowlers_end');
+  const [selectedShot, setSelectedShot] = useState<WagonShot | null>(null);
 
-  // Animation & Three.js refs
+  // Mutable refs to prevent stale closure in animation loop
+  const activeModeRef = useRef<'pitch' | 'trajectory' | 'wagon'>(activeMode);
+  activeModeRef.current = activeMode;
+  const selectedDeliveryRef = useRef<DeliveryPreset>(selectedDelivery);
+  selectedDeliveryRef.current = selectedDelivery;
+  const isPlayingRef = useRef<boolean>(isPlaying);
+  isPlayingRef.current = isPlaying;
+
+  // Three.js scene refs
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const animFrameRef = useRef<number | null>(null);
+
+  // Hawkeye objects
   const ballMeshRef = useRef<THREE.Mesh | null>(null);
-  const trajectoryTrailRef = useRef<THREE.Line | null>(null);
+  const hawkeyePreLineRef = useRef<THREE.Line | null>(null);
+  const hawkeyePostLineRef = useRef<THREE.Line | null>(null);
+  const hawkeyeProjectedLineRef = useRef<THREE.Line | null>(null);
+  const bounceMarkerRef = useRef<THREE.Mesh | null>(null);
   const wagonLinesRef = useRef<THREE.Group | null>(null);
+  const pitchDimensionGroupRef = useRef<THREE.Group | null>(null);
   const stumpsGroupRef = useRef<THREE.Group | null>(null);
   const bailsMeshRef = useRef<THREE.Mesh[]>([]);
   const ballProgressRef = useRef<number>(0);
-  const bounceMarkerRef = useRef<THREE.Mesh | null>(null);
 
-  // Mouse orbit dragging state
+  // Pre-cached splines for each delivery to prevent runtime allocation
+  const curvesCacheRef = useRef<Map<string, THREE.CatmullRomCurve3>>(new Map());
+
+  // Mouse orbit controls
   const isMouseDownRef = useRef<boolean>(false);
   const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const cameraTargetRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0.8, 8));
@@ -218,18 +290,149 @@ export function CricketPitch3D() {
     phi: 1.25,
   });
 
-  // Cinematic smooth camera glide interpolation refs
+  // Camera lerp animation
   const targetCamPosRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 3.8, -19));
   const targetCamLookAtRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0.8, 8));
   const currentCamLookAtRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0.8, 8));
   const isTransitioningCameraRef = useRef<boolean>(false);
 
+  // Re-build or update Hawkeye illuminated trajectory beam
+  const updateHawkeyeBeam = useCallback((delivery: DeliveryPreset) => {
+    if (!sceneRef.current) return;
+    const scene = sceneRef.current;
+
+    // Remove existing Hawkeye beams if present
+    if (hawkeyePreLineRef.current) scene.remove(hawkeyePreLineRef.current);
+    if (hawkeyePostLineRef.current) scene.remove(hawkeyePostLineRef.current);
+    if (hawkeyeProjectedLineRef.current) scene.remove(hawkeyeProjectedLineRef.current);
+
+    let curve = curvesCacheRef.current.get(delivery.id);
+    if (!curve) {
+      curve = new THREE.CatmullRomCurve3(delivery.curve);
+      curvesCacheRef.current.set(delivery.id, curve);
+    }
+
+    // Split into pre-bounce (bowler release -> bounce point) and post-bounce (bounce -> batsman/stump)
+    const bouncePointIndex = delivery.bounceIndex; // index 2
+    const totalPoints = delivery.curve.length;
+    const bounceT = bouncePointIndex / (totalPoints - 1);
+
+    // Pre-bounce curve points
+    const prePoints: THREE.Vector3[] = [];
+    const postPoints: THREE.Vector3[] = [];
+    const projectedPoints: THREE.Vector3[] = [];
+
+    const segments = 40;
+    for (let i = 0; i <= segments; i++) {
+      const t = i / segments;
+      const pt = curve.getPoint(t);
+      if (t <= bounceT) {
+        prePoints.push(pt);
+      } else {
+        if (postPoints.length === 0 && prePoints.length > 0) {
+          postPoints.push(prePoints[prePoints.length - 1]);
+        }
+        postPoints.push(pt);
+      }
+    }
+
+    // Projected continuation beyond batsman crease
+    const lastPt = delivery.curve[delivery.curve.length - 1];
+    const secondLastPt = delivery.curve[delivery.curve.length - 2];
+    const dir = new THREE.Vector3().subVectors(lastPt, secondLastPt).normalize();
+    projectedPoints.push(lastPt.clone());
+    projectedPoints.push(
+      new THREE.Vector3(lastPt.x + dir.x * 3.5, Math.max(0.08, lastPt.y + dir.y * 3.5), lastPt.z + dir.z * 3.5)
+    );
+
+    // Pre-bounce beam (Glowing Cyan #00f0ff)
+    const preGeo = new THREE.BufferGeometry().setFromPoints(prePoints);
+    const preMat = new THREE.LineBasicMaterial({
+      color: 0x00f0ff,
+      linewidth: 3,
+      transparent: true,
+      opacity: 0.9,
+    });
+    const preLine = new THREE.Line(preGeo, preMat);
+    scene.add(preLine);
+    hawkeyePreLineRef.current = preLine;
+
+    // Post-bounce beam (Neon Rose / Amber #ff0055 or #f59e0b)
+    const postGeo = new THREE.BufferGeometry().setFromPoints(postPoints);
+    const postMat = new THREE.LineBasicMaterial({
+      color: delivery.hitStumps ? 0xff2e63 : 0xf59e0b,
+      linewidth: 3,
+      transparent: true,
+      opacity: 0.95,
+    });
+    const postLine = new THREE.Line(postGeo, postMat);
+    scene.add(postLine);
+    hawkeyePostLineRef.current = postLine;
+
+    // Projected path line (dashed / lower opacity)
+    const projGeo = new THREE.BufferGeometry().setFromPoints(projectedPoints);
+    const projMat = new THREE.LineBasicMaterial({
+      color: delivery.hitStumps ? 0xff2e63 : 0x94a3b8,
+      linewidth: 1,
+      transparent: true,
+      opacity: 0.45,
+    });
+    const projLine = new THREE.Line(projGeo, projMat);
+    scene.add(projLine);
+    hawkeyeProjectedLineRef.current = projLine;
+
+    // Position pitch bounce marker
+    if (bounceMarkerRef.current && delivery.curve.length > bouncePointIndex) {
+      const bouncePt = delivery.curve[bouncePointIndex];
+      bounceMarkerRef.current.position.set(bouncePt.x, 0.045, bouncePt.z);
+      bounceMarkerRef.current.visible = true;
+    }
+  }, []);
+
+  const resetBails = () => {
+    if (bailsMeshRef.current.length >= 2) {
+      bailsMeshRef.current[0].position.set(-0.06, 0.73, 0);
+      bailsMeshRef.current[0].rotation.set(0, 0, Math.PI / 2);
+      bailsMeshRef.current[1].position.set(0.06, 0.73, 0);
+      bailsMeshRef.current[1].rotation.set(0, 0, Math.PI / 2);
+    }
+  };
+
+  // Select camera view
+  const handleSelectCameraView = (viewId: PresetCameraView) => {
+    setActiveCameraView(viewId);
+    sounds.playClick();
+    const config = PRESET_CAMERA_VIEWS.find((v) => v.id === viewId);
+    if (!config) return;
+
+    cameraSphericalRef.current = { ...config.spherical };
+    targetCamPosRef.current.copy(config.position);
+    targetCamLookAtRef.current.copy(config.target);
+    cameraTargetRef.current.copy(config.target);
+    isTransitioningCameraRef.current = true;
+  };
+
+  // Mount Three.js Scene
   useEffect(() => {
     if (!containerRef.current) return;
-
     const container = containerRef.current;
     const width = container.clientWidth || 800;
     const height = container.clientHeight || 520;
+
+    // Detect software WebGL
+    const isSoftwareGl = (() => {
+      try {
+        const gl = document.createElement('canvas').getContext('webgl2');
+        if (!gl) return true;
+        const ext = gl.getExtension('WEBGL_debug_renderer_info');
+        const param = ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER;
+        const gpu = String(gl.getParameter(param));
+        gl.getExtension('WEBGL_lose_context')?.loseContext();
+        return /SwiftShader|llvmpipe|softpipe|Software|Basic Render/i.test(gpu);
+      } catch {
+        return false;
+      }
+    })();
 
     // 1. Scene Setup
     const scene = new THREE.Scene();
@@ -240,34 +443,41 @@ export function CricketPitch3D() {
     // 2. Camera Setup
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 500);
     cameraRef.current = camera;
-    updateCameraPosition();
+    camera.position.set(0, 3.8, -19);
+    camera.lookAt(0, 0.8, 8);
 
-    // 3. Renderer Setup conforming to Three.js constitutional standards
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+    // 3. Renderer Setup
+    const renderer = new THREE.WebGLRenderer({
+      antialias: !isSoftwareGl,
+      alpha: false,
+      powerPreference: 'high-performance',
+    });
     rendererRef.current = renderer;
     renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(window.devicePixelRatio, 2));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.15;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.enabled = !isSoftwareGl;
     renderer.shadowMap.type = THREE.PCFShadowMap;
 
     container.replaceChildren(renderer.domElement);
 
-    // 4. Studio & Stadium Lighting (Warm Key + Cool Fill + Floodlights)
+    // 4. Balanced Studio Rig (Warm Key + Cool Fill + Pitch Rim Light)
     const keyLight = new THREE.DirectionalLight(0xfff5e0, 1.8);
     keyLight.position.set(15, 25, -15);
-    keyLight.castShadow = true;
-    keyLight.shadow.mapSize.width = 2048;
-    keyLight.shadow.mapSize.height = 2048;
-    keyLight.shadow.camera.near = 0.5;
-    keyLight.shadow.camera.far = 100;
-    keyLight.shadow.camera.left = -20;
-    keyLight.shadow.camera.right = 20;
-    keyLight.shadow.camera.top = 20;
-    keyLight.shadow.camera.bottom = -20;
-    keyLight.shadow.bias = -0.0005;
+    keyLight.castShadow = !isSoftwareGl;
+    if (!isSoftwareGl) {
+      keyLight.shadow.mapSize.width = 1024;
+      keyLight.shadow.mapSize.height = 1024;
+      keyLight.shadow.camera.near = 0.5;
+      keyLight.shadow.camera.far = 100;
+      keyLight.shadow.camera.left = -20;
+      keyLight.shadow.camera.right = 20;
+      keyLight.shadow.camera.top = 20;
+      keyLight.shadow.camera.bottom = -20;
+      keyLight.shadow.bias = -0.0005;
+    }
     scene.add(keyLight);
 
     const fillLight = new THREE.DirectionalLight(0x9fc5e8, 0.9);
@@ -277,13 +487,12 @@ export function CricketPitch3D() {
     const hemiLight = new THREE.HemisphereLight(0x386641, 0x0f172a, 0.7);
     scene.add(hemiLight);
 
-    // 5. Procedural Textures (Grass with stripes & Pitch Creases)
+    // 5. Procedural Textures & Field
     const turfCanvas = document.createElement('canvas');
     turfCanvas.width = 512;
     turfCanvas.height = 512;
     const ctx = turfCanvas.getContext('2d');
     if (ctx) {
-      // Concentric lawn mowing rings
       ctx.fillStyle = '#1e4822';
       ctx.fillRect(0, 0, 512, 512);
       for (let i = 0; i < 512; i += 32) {
@@ -295,9 +504,10 @@ export function CricketPitch3D() {
     turfTexture.wrapS = THREE.RepeatWrapping;
     turfTexture.wrapT = THREE.RepeatWrapping;
     turfTexture.repeat.set(8, 8);
+    turfTexture.colorSpace = THREE.SRGBColorSpace;
 
-    // 6. Ground Oval & Pitch Geometry
-    const fieldGeo = new THREE.CylinderGeometry(40, 41, 0.4, 64);
+    // Field Oval
+    const fieldGeo = new THREE.CylinderGeometry(40, 41, 0.4, 48);
     const fieldMat = new THREE.MeshStandardMaterial({
       map: turfTexture,
       roughness: 0.85,
@@ -305,11 +515,11 @@ export function CricketPitch3D() {
     });
     const field = new THREE.Mesh(fieldGeo, fieldMat);
     field.position.y = -0.2;
-    field.receiveShadow = true;
+    field.receiveShadow = !isSoftwareGl;
     scene.add(field);
 
-    // Boundary Rope Ring
-    const boundaryGeo = new THREE.TorusGeometry(38, 0.22, 16, 100);
+    // Boundary Rope
+    const boundaryGeo = new THREE.TorusGeometry(38, 0.22, 12, 64);
     const boundaryMat = new THREE.MeshStandardMaterial({
       color: 0xef4444,
       roughness: 0.5,
@@ -320,20 +530,20 @@ export function CricketPitch3D() {
     boundaryRope.position.y = 0.05;
     scene.add(boundaryRope);
 
-    // 30-Yard Circle Inner Arc
-    const circle30Geo = new THREE.RingGeometry(18.5, 18.7, 64);
+    // 30-Yard Circle
+    const circle30Geo = new THREE.RingGeometry(18.5, 18.7, 48);
     const circle30Mat = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       side: THREE.DoubleSide,
       transparent: true,
-      opacity: 0.4,
+      opacity: 0.35,
     });
     const circle30 = new THREE.Mesh(circle30Geo, circle30Mat);
     circle30.rotation.x = -Math.PI / 2;
     circle30.position.y = 0.02;
     scene.add(circle30);
 
-    // 22-Yard Central Pitch (Scaled length ~20.12 units, width ~3.05 units)
+    // 22-Yard Central Pitch (Scaled 20.12m x 3.05m)
     const pitchGeo = new THREE.BoxGeometry(3.2, 0.05, 20.2);
     const pitchMat = new THREE.MeshStandardMaterial({
       color: 0xc49a45,
@@ -342,10 +552,10 @@ export function CricketPitch3D() {
     });
     const pitch = new THREE.Mesh(pitchGeo, pitchMat);
     pitch.position.y = 0.02;
-    pitch.receiveShadow = true;
+    pitch.receiveShadow = !isSoftwareGl;
     scene.add(pitch);
 
-    // Painted Pitch Crease Markings (Popping, Bowling & Return Creases)
+    // Crease Markings
     const createCreaseMarking = (width: number, length: number, x: number, z: number) => {
       const geo = new THREE.PlaneGeometry(width, length);
       const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
@@ -356,10 +566,10 @@ export function CricketPitch3D() {
     };
 
     // Batsman End Creases (z = 10)
-    createCreaseMarking(2.6, 0.08, 0, 10.0); // Bowling crease
-    createCreaseMarking(3.0, 0.08, 0, 8.8); // Popping crease
-    createCreaseMarking(0.08, 2.4, -1.3, 9.4); // Return crease left
-    createCreaseMarking(0.08, 2.4, 1.3, 9.4); // Return crease right
+    createCreaseMarking(2.6, 0.08, 0, 10.0);
+    createCreaseMarking(3.0, 0.08, 0, 8.8);
+    createCreaseMarking(0.08, 2.4, -1.3, 9.4);
+    createCreaseMarking(0.08, 2.4, 1.3, 9.4);
 
     // Bowler End Creases (z = -10)
     createCreaseMarking(2.6, 0.08, 0, -10.0);
@@ -367,7 +577,25 @@ export function CricketPitch3D() {
     createCreaseMarking(0.08, 2.4, -1.3, -9.4);
     createCreaseMarking(0.08, 2.4, 1.3, -9.4);
 
-    // 7. Stumps & Bails Group (Procedural composite models)
+    // Pitch Dimensions Visualization Group (active in 'pitch' mode)
+    const pitchDimGroup = new THREE.Group();
+    const dimLineGeo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(-1.7, 0.1, -10),
+      new THREE.Vector3(-1.7, 0.1, 10),
+    ]);
+    const dimLineMat = new THREE.LineDashedMaterial({
+      color: 0x38bdf8,
+      dashSize: 0.5,
+      gapSize: 0.3,
+    });
+    const dimLine = new THREE.Line(dimLineGeo, dimLineMat);
+    dimLine.computeLineDistances();
+    pitchDimGroup.add(dimLine);
+    pitchDimGroup.visible = false;
+    scene.add(pitchDimGroup);
+    pitchDimensionGroupRef.current = pitchDimGroup;
+
+    // Stumps & Bails
     const buildWicketGroup = (zPos: number, isTarget: boolean) => {
       const wicketGroup = new THREE.Group();
       const woodMat = new THREE.MeshStandardMaterial({
@@ -376,18 +604,16 @@ export function CricketPitch3D() {
         metalness: 0.1,
       });
 
-      const stumpGeo = new THREE.CylinderGeometry(0.035, 0.035, 0.72, 16);
+      const stumpGeo = new THREE.CylinderGeometry(0.035, 0.035, 0.72, 12);
       const spacing = 0.12;
 
-      // 3 Stumps (Off, Middle, Leg)
       for (let i = -1; i <= 1; i++) {
         const stump = new THREE.Mesh(stumpGeo, woodMat);
         stump.position.set(i * spacing, 0.36, 0);
-        stump.castShadow = true;
+        stump.castShadow = !isSoftwareGl;
         wicketGroup.add(stump);
       }
 
-      // 2 Bails
       const bailGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.13, 8);
       const bail1 = new THREE.Mesh(bailGeo, woodMat);
       bail1.rotation.z = Math.PI / 2;
@@ -408,10 +634,10 @@ export function CricketPitch3D() {
       }
     };
 
-    buildWicketGroup(10.0, true); // Batsman end
-    buildWicketGroup(-10.0, false); // Bowler end
+    buildWicketGroup(10.0, true);
+    buildWicketGroup(-10.0, false);
 
-    // 8. Sight Screens at both ends
+    // Sight Screens
     const buildSightScreen = (zPos: number) => {
       const group = new THREE.Group();
       const screenGeo = new THREE.BoxGeometry(4.2, 2.8, 0.1);
@@ -419,46 +645,32 @@ export function CricketPitch3D() {
       const board = new THREE.Mesh(screenGeo, screenMat);
       board.position.y = 1.6;
       group.add(board);
-
-      const poleGeo = new THREE.CylinderGeometry(0.06, 0.06, 3.2, 8);
-      const poleMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.5 });
-      const pole1 = new THREE.Mesh(poleGeo, poleMat);
-      pole1.position.set(-1.8, 1.6, 0);
-      group.add(pole1);
-      const pole2 = new THREE.Mesh(poleGeo, poleMat);
-      pole2.position.set(1.8, 1.6, 0);
-      group.add(pole2);
-
       group.position.set(0, 0, zPos);
       scene.add(group);
     };
-
     buildSightScreen(36);
     buildSightScreen(-36);
 
-    // 9. Stadium Floodlight Towers (4 corners, multi-part steel frame & light array)
+    // Stadium Floodlights
     const towerPositions = [
       { x: 30, z: 25 },
       { x: -30, z: 25 },
       { x: 30, z: -25 },
       { x: -30, z: -25 },
     ];
-
     towerPositions.forEach((pos) => {
       const towerGroup = new THREE.Group();
-      // Pylon
       const pylonGeo = new THREE.CylinderGeometry(0.4, 0.8, 22, 6);
       const pylonMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.8, roughness: 0.3 });
       const pylon = new THREE.Mesh(pylonGeo, pylonMat);
       pylon.position.y = 11;
       towerGroup.add(pylon);
 
-      // Light Head Array
       const headGeo = new THREE.BoxGeometry(3.5, 2.0, 0.8);
       const headMat = new THREE.MeshStandardMaterial({
         color: 0xfffbe8,
         emissive: 0xfff1aa,
-        emissiveIntensity: 1.8,
+        emissiveIntensity: 1.5,
         roughness: 0.2,
       });
       const head = new THREE.Mesh(headGeo, headMat);
@@ -470,31 +682,20 @@ export function CricketPitch3D() {
       scene.add(towerGroup);
     });
 
-    // 10. Cricket Ball with Seam
-    const ballCanvas = document.createElement('canvas');
-    ballCanvas.width = 128;
-    ballCanvas.height = 128;
-    const bCtx = ballCanvas.getContext('2d');
-    if (bCtx) {
-      bCtx.fillStyle = '#dc2626'; // cricket red leather
-      bCtx.fillRect(0, 0, 128, 128);
-      bCtx.fillStyle = '#f8fafc'; // white seam
-      bCtx.fillRect(60, 0, 8, 128);
-    }
-    const ballTexture = new THREE.CanvasTexture(ballCanvas);
-    const ballGeo = new THREE.SphereGeometry(0.12, 32, 32);
+    // Cricket Ball
+    const ballGeo = new THREE.SphereGeometry(0.12, 24, 24);
     const ballMat = new THREE.MeshStandardMaterial({
-      map: ballTexture,
+      color: 0xdc2626,
       roughness: 0.3,
       metalness: 0.1,
     });
     const ballMesh = new THREE.Mesh(ballGeo, ballMat);
-    ballMesh.castShadow = true;
+    ballMesh.castShadow = !isSoftwareGl;
     scene.add(ballMesh);
     ballMeshRef.current = ballMesh;
 
     // Pitch Bounce Contact Marker
-    const bounceMarkerGeo = new THREE.RingGeometry(0.08, 0.35, 32);
+    const bounceMarkerGeo = new THREE.RingGeometry(0.08, 0.35, 24);
     const bounceMarkerMat = new THREE.MeshBasicMaterial({
       color: 0x38bdf8,
       side: THREE.DoubleSide,
@@ -507,14 +708,13 @@ export function CricketPitch3D() {
     scene.add(bounceMarker);
     bounceMarkerRef.current = bounceMarker;
 
-    // 11. Wagon Wheel Group Initialization
+    // Wagon Wheel Group
     const wagonGroup = new THREE.Group();
     WAGON_SHOTS.forEach((shot) => {
-      const radius = shot.distanceMeters * 0.36; // scale to field
+      const radius = shot.distanceMeters * 0.36;
       const targetX = Math.cos(shot.angleRad) * radius;
       const targetZ = 10.0 + Math.sin(shot.angleRad) * radius;
 
-      // Arc curve from batsman crease
       const curve = new THREE.QuadraticBezierCurve3(
         new THREE.Vector3(0, 0.4, 10.0),
         new THREE.Vector3(targetX * 0.5, shot.height, 10.0 + (targetZ - 10.0) * 0.5),
@@ -532,8 +732,7 @@ export function CricketPitch3D() {
       const arcLine = new THREE.Line(lineGeo, lineMat);
       wagonGroup.add(arcLine);
 
-      // Landing point pin
-      const pinGeo = new THREE.SphereGeometry(0.2, 16, 16);
+      const pinGeo = new THREE.SphereGeometry(0.2, 12, 12);
       const pinMat = new THREE.MeshStandardMaterial({
         color: shot.color,
         emissive: shot.color,
@@ -547,7 +746,10 @@ export function CricketPitch3D() {
     scene.add(wagonGroup);
     wagonLinesRef.current = wagonGroup;
 
-    // 12. Mouse Drag Event Listeners for Orbiting
+    // Build initial Hawkeye beam
+    updateHawkeyeBeam(selectedDeliveryRef.current);
+
+    // Mouse drag orbit handlers
     const onMouseDown = (e: MouseEvent) => {
       isMouseDownRef.current = true;
       isTransitioningCameraRef.current = false;
@@ -562,10 +764,16 @@ export function CricketPitch3D() {
 
       cameraSphericalRef.current.theta -= deltaX * 0.008;
       cameraSphericalRef.current.phi = Math.max(
-        0.1,
+        0.08,
         Math.min(Math.PI / 2 - 0.05, cameraSphericalRef.current.phi - deltaY * 0.008)
       );
-      updateCameraPosition();
+
+      const { radius, theta, phi } = cameraSphericalRef.current;
+      const target = cameraTargetRef.current;
+      camera.position.x = target.x + radius * Math.sin(phi) * Math.sin(theta);
+      camera.position.y = target.y + radius * Math.cos(phi);
+      camera.position.z = target.z + radius * Math.sin(phi) * Math.cos(theta);
+      camera.lookAt(target);
     };
 
     const onMouseUp = () => {
@@ -578,7 +786,12 @@ export function CricketPitch3D() {
         8,
         Math.min(60, cameraSphericalRef.current.radius + e.deltaY * 0.03)
       );
-      updateCameraPosition();
+      const { radius, theta, phi } = cameraSphericalRef.current;
+      const target = cameraTargetRef.current;
+      camera.position.x = target.x + radius * Math.sin(phi) * Math.sin(theta);
+      camera.position.y = target.y + radius * Math.cos(phi);
+      camera.position.z = target.z + radius * Math.sin(phi) * Math.cos(theta);
+      camera.lookAt(target);
     };
 
     container.addEventListener('mousedown', onMouseDown);
@@ -586,7 +799,6 @@ export function CricketPitch3D() {
     window.addEventListener('mouseup', onMouseUp);
     container.addEventListener('wheel', onWheel, { passive: false });
 
-    // 13. Window Resize Handler
     const onResize = () => {
       if (!containerRef.current || !rendererRef.current || !cameraRef.current) return;
       const w = containerRef.current.clientWidth;
@@ -597,35 +809,57 @@ export function CricketPitch3D() {
     };
     window.addEventListener('resize', onResize);
 
-    // 14. Render Animation Loop
+    // Animation Loop with robust timing guards & software-WebGL pacing
     let lastTime = performance.now();
+    let isDisposed = false;
+
     const animate = (currentTime: number) => {
-      const deltaTime = (currentTime - lastTime) / 1000;
+      if (isDisposed) return;
+
+      // Safe delta time calculation (guarded against negative or huge values on tab blur)
+      const rawDelta = (currentTime - lastTime) / 1000;
+      const deltaTime = Math.max(0, Math.min(0.08, isNaN(rawDelta) ? 0.016 : rawDelta));
       lastTime = currentTime;
 
-      // Handle ball animation in trajectory mode
-      if (ballMeshRef.current && activeMode === 'trajectory' && isPlaying) {
-        ballProgressRef.current += deltaTime * (selectedDelivery.speedKmh / 140) * 0.65;
-        if (ballProgressRef.current > 1.0) {
+      const currentMode = activeModeRef.current;
+      const currentPlaying = isPlayingRef.current;
+      const currentDelivery = selectedDeliveryRef.current;
+
+      // Ball Hawkeye physics animation
+      if (ballMeshRef.current && currentMode === 'trajectory' && currentPlaying) {
+        const speed = currentDelivery.speedKmh || 140;
+        ballProgressRef.current += deltaTime * (speed / 140) * 0.65;
+
+        if (ballProgressRef.current >= 1.0) {
           ballProgressRef.current = 0;
-          // Reset bails
-          if (bailsMeshRef.current.length > 0) {
-            bailsMeshRef.current[0].position.set(-0.06, 0.73, 0);
-            bailsMeshRef.current[0].rotation.set(0, 0, Math.PI / 2);
-            bailsMeshRef.current[1].position.set(0.06, 0.73, 0);
-            bailsMeshRef.current[1].rotation.set(0, 0, Math.PI / 2);
-          }
+          resetBails();
         }
 
-        const t = ballProgressRef.current;
-        const curve = new THREE.CatmullRomCurve3(selectedDelivery.curve);
-        const pt = curve.getPoint(t);
-        ballMeshRef.current.position.copy(pt);
-        ballMeshRef.current.rotation.x += 0.25;
-        ballMeshRef.current.rotation.z += 0.15;
+        // STRICT CLAMP to [0, 1] to prevent CatmullRomCurve3 out-of-bounds undefined reading 'x' crash
+        const t = Math.max(
+          0,
+          Math.min(1, isNaN(ballProgressRef.current) ? 0 : ballProgressRef.current)
+        );
 
-        // Animate bails flying on bowled delivery
-        if (selectedDelivery.hitStumps && t > 0.95 && bailsMeshRef.current.length > 0) {
+        let activeCurve = curvesCacheRef.current.get(currentDelivery.id);
+        if (!activeCurve) {
+          activeCurve = new THREE.CatmullRomCurve3(currentDelivery.curve);
+          curvesCacheRef.current.set(currentDelivery.id, activeCurve);
+        }
+
+        try {
+          const pt = activeCurve.getPoint(t);
+          if (pt && !isNaN(pt.x)) {
+            ballMeshRef.current.position.copy(pt);
+            ballMeshRef.current.rotation.x += 0.25;
+            ballMeshRef.current.rotation.z += 0.15;
+          }
+        } catch {
+          // Graceful fallback
+        }
+
+        // Bowled delivery stump collision & bails flight
+        if (currentDelivery.hitStumps && t > 0.94 && bailsMeshRef.current.length >= 2) {
           bailsMeshRef.current[0].position.y += 0.04;
           bailsMeshRef.current[0].position.x += 0.03;
           bailsMeshRef.current[0].rotation.x += 0.3;
@@ -633,16 +867,9 @@ export function CricketPitch3D() {
           bailsMeshRef.current[1].position.x -= 0.04;
           bailsMeshRef.current[1].rotation.z += 0.4;
         }
-
-        // Place bounce ring marker
-        if (bounceMarkerRef.current && selectedDelivery.curve.length > 2) {
-          const bouncePt = selectedDelivery.curve[selectedDelivery.bounceIndex];
-          bounceMarkerRef.current.position.set(bouncePt.x, 0.04, bouncePt.z);
-          bounceMarkerRef.current.visible = true;
-        }
       }
 
-      // Smooth cinematic camera gliding between preset views
+      // Smooth camera interpolation
       if (isTransitioningCameraRef.current && camera) {
         camera.position.lerp(targetCamPosRef.current, 0.08);
         currentCamLookAtRef.current.lerp(targetCamLookAtRef.current, 0.08);
@@ -657,34 +884,30 @@ export function CricketPitch3D() {
       }
 
       renderer.render(scene, camera);
-      animFrameRef.current = requestAnimationFrame(animate);
+
+      if (isSoftwareGl) {
+        // Paced software-WebGL frame schedule to avoid starving CPU & Playwright
+        window.setTimeout(() => {
+          if (!isDisposed) {
+            animFrameRef.current = requestAnimationFrame(animate);
+          }
+        }, 50);
+      } else {
+        animFrameRef.current = requestAnimationFrame(animate);
+      }
     };
 
     animFrameRef.current = requestAnimationFrame(animate);
 
-    // 15. WebGL Context Loss & Restoration Safety
-    const handleContextLost = (event: Event) => {
-      event.preventDefault();
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    };
-    const handleContextRestored = () => {
-      renderer.setSize(container.clientWidth || 800, container.clientHeight || 520);
-      animFrameRef.current = requestAnimationFrame(animate);
-    };
-    renderer.domElement.addEventListener('webglcontextlost', handleContextLost, false);
-    renderer.domElement.addEventListener('webglcontextrestored', handleContextRestored, false);
-
-    // Cleanup on unmount
     return () => {
+      isDisposed = true;
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       container.removeEventListener('mousedown', onMouseDown);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
       container.removeEventListener('wheel', onWheel);
       window.removeEventListener('resize', onResize);
-      renderer.domElement.removeEventListener('webglcontextlost', handleContextLost);
-      renderer.domElement.removeEventListener('webglcontextrestored', handleContextRestored);
-      
+
       scene.traverse((object) => {
         if (object instanceof THREE.Mesh) {
           if (object.geometry) object.geometry.dispose();
@@ -697,57 +920,17 @@ export function CricketPitch3D() {
       });
       renderer.dispose();
     };
-  }, []);
+  }, [updateHawkeyeBeam]);
 
-  // Update camera coordinates based on spherical coordinates
-  const updateCameraPosition = () => {
-    if (!cameraRef.current) return;
-    const { radius, theta, phi } = cameraSphericalRef.current;
-    const target = cameraTargetRef.current;
-
-    cameraRef.current.position.x = target.x + radius * Math.sin(phi) * Math.sin(theta);
-    cameraRef.current.position.y = target.y + radius * Math.cos(phi);
-    cameraRef.current.position.z = target.z + radius * Math.sin(phi) * Math.cos(theta);
-    cameraRef.current.lookAt(target);
-  };
-
-  // Select one of the broadcast preset camera views ('Bird's Eye', 'Bowler's End', 'Umpire View')
-  const handleSelectCameraView = (viewId: PresetCameraView) => {
-    setActiveCameraView(viewId);
-    sounds.playClick();
-    const config = PRESET_CAMERA_VIEWS.find((v) => v.id === viewId);
-    if (!config) return;
-
-    cameraSphericalRef.current = { ...config.spherical };
-    targetCamPosRef.current.copy(config.position);
-    targetCamLookAtRef.current.copy(config.target);
-    cameraTargetRef.current.copy(config.target);
-    isTransitioningCameraRef.current = true;
-  };
-
-  // Switch camera angle presets
-  const handleCameraPreset = (preset: 'bowler' | 'batsman' | 'side' | 'overhead') => {
-    setCameraPreset(preset);
-    if (preset === 'bowler') {
-      handleSelectCameraView('bowlers_end');
-    } else if (preset === 'overhead') {
-      handleSelectCameraView('birds_eye');
-    } else if (preset === 'batsman') {
-      handleSelectCameraView('umpire_view');
-    } else if (preset === 'side') {
-      sounds.playClick();
-      cameraSphericalRef.current = { radius: 20, theta: Math.PI / 2, phi: 1.3 };
-      cameraTargetRef.current = new THREE.Vector3(0, 0.5, 0);
-      targetCamPosRef.current.set(20, 4.5, 0);
-      targetCamLookAtRef.current.set(0, 0.5, 0);
-      isTransitioningCameraRef.current = true;
-    }
-  };
-
-  // Toggle modes
+  // Mode switching side-effects
   useEffect(() => {
+    activeModeRef.current = activeMode;
+
     if (wagonLinesRef.current) {
       wagonLinesRef.current.visible = activeMode === 'wagon';
+    }
+    if (pitchDimensionGroupRef.current) {
+      pitchDimensionGroupRef.current.visible = activeMode === 'pitch';
     }
     if (ballMeshRef.current) {
       ballMeshRef.current.visible = activeMode === 'trajectory';
@@ -755,40 +938,73 @@ export function CricketPitch3D() {
     if (bounceMarkerRef.current) {
       bounceMarkerRef.current.visible = activeMode === 'trajectory';
     }
+    if (hawkeyePreLineRef.current) {
+      hawkeyePreLineRef.current.visible = activeMode === 'trajectory';
+    }
+    if (hawkeyePostLineRef.current) {
+      hawkeyePostLineRef.current.visible = activeMode === 'trajectory';
+    }
+    if (hawkeyeProjectedLineRef.current) {
+      hawkeyeProjectedLineRef.current.visible = activeMode === 'trajectory';
+    }
 
     if (activeMode === 'wagon') {
-      handleCameraPreset('overhead');
+      handleSelectCameraView('birds_eye');
     } else if (activeMode === 'trajectory') {
-      handleCameraPreset('bowler');
+      handleSelectCameraView('bowlers_end');
+    } else if (activeMode === 'pitch') {
+      sounds.playClick();
+      cameraSphericalRef.current = { radius: 22, theta: Math.PI / 2, phi: 1.35 };
+      cameraTargetRef.current = new THREE.Vector3(0, 0.5, 0);
+      targetCamPosRef.current.set(22, 4.5, 0);
+      targetCamLookAtRef.current.set(0, 0.5, 0);
+      isTransitioningCameraRef.current = true;
     }
   }, [activeMode]);
 
-  return (
-    <div className="relative w-full h-[580px] bg-[#070b13] rounded-lg overflow-hidden border border-slate-800 shadow-xl flex flex-col">
-      {/* 3D WebGL Canvas Viewport */}
-      <div ref={containerRef} className="w-full h-full cursor-grab active:cursor-grabbing select-none" />
+  // Delivery change handler
+  const handleSelectDelivery = (delivery: DeliveryPreset) => {
+    setSelectedDelivery(delivery);
+    selectedDeliveryRef.current = delivery;
+    ballProgressRef.current = 0;
+    resetBails();
+    updateHawkeyeBeam(delivery);
+    sounds.playClick();
+  };
 
-      {/* Floating Top Header Overlay */}
-      <div className="absolute top-4 left-4 right-4 flex items-center justify-between pointer-events-none">
-        <div className="flex items-center gap-2 pointer-events-auto bg-[#0b0f19]/90 backdrop-blur-md px-3.5 py-1.5 rounded-md border border-slate-800 shadow-md">
-          <span className="text-xs font-semibold text-slate-100">
-            Cricket 3D Physics Viewport
+  const drs = selectedDelivery.drs;
+
+  return (
+    <div className="relative w-full h-[620px] bg-[#070b13] rounded-xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col">
+      {/* 3D WebGL Canvas Viewport */}
+      <div
+        ref={containerRef}
+        className="w-full h-full cursor-grab active:cursor-grabbing select-none"
+        aria-label="3D Cricket Stadium and Hawkeye Viewport"
+      />
+
+      {/* Floating Top Header Bar */}
+      <div className="absolute top-4 left-4 right-4 flex items-center justify-between pointer-events-none z-10">
+        <div className="flex items-center gap-2.5 pointer-events-auto bg-[#0b0f19]/90 backdrop-blur-md px-3.5 py-1.5 rounded-lg border border-slate-800 shadow-md">
+          <span className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            3D Cricket Physics
           </span>
           <span className="text-slate-600" aria-hidden="true">·</span>
-          <span className="text-[11px] text-slate-400 font-mono">
-            Interactive Hawkeye
+          <span className="text-[11px] text-emerald-400 font-mono font-medium">
+            Hawkeye Precision Engine
           </span>
         </div>
 
-        {/* Mode Switcher Buttons */}
-        <div className="flex items-center gap-1 pointer-events-auto bg-[#0b0f19]/90 backdrop-blur-md p-1 rounded-md border border-slate-800 shadow-md">
+        {/* Viewport Mode Switcher */}
+        <div className="flex items-center gap-1 pointer-events-auto bg-[#0b0f19]/90 backdrop-blur-md p-1 rounded-lg border border-slate-800 shadow-md">
           <button
             type="button"
             onClick={() => setActiveMode('trajectory')}
-            className={`px-3 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-colors ${
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all ${
               activeMode === 'trajectory'
-                ? 'bg-slate-800 text-white font-semibold'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
             <Target className="w-3.5 h-3.5" />
@@ -797,10 +1013,10 @@ export function CricketPitch3D() {
           <button
             type="button"
             onClick={() => setActiveMode('wagon')}
-            className={`px-3 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-colors ${
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all ${
               activeMode === 'wagon'
-                ? 'bg-slate-800 text-white font-semibold'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
             <Compass className="w-3.5 h-3.5" />
@@ -809,47 +1025,92 @@ export function CricketPitch3D() {
           <button
             type="button"
             onClick={() => setActiveMode('pitch')}
-            className={`px-3 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-colors ${
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all ${
               activeMode === 'pitch'
-                ? 'bg-slate-800 text-white font-semibold'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-sky-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            <span>Pitch View</span>
+            <span>Pitch Dimensions</span>
           </button>
         </div>
       </div>
 
-      {/* Trajectory / Shot Active Specs Card */}
+      {/* Hawkeye DRS Decision Panel (Authentic Broadcast Graphics) */}
       {activeMode === 'trajectory' && (
-        <div className="absolute top-16 left-4 bg-[#0b0f19]/90 backdrop-blur-md p-3.5 rounded-md border border-slate-800 text-xs text-slate-300 w-64 shadow-lg pointer-events-none">
-          <div className="flex items-center justify-between mb-1">
-            <span className="font-semibold text-slate-100">{selectedDelivery.bowler}</span>
-            <span className="font-mono text-emerald-400 font-semibold tabular-nums">{selectedDelivery.speedKmh} km/h</span>
+        <div className="absolute top-16 left-4 z-10 bg-[#0b0f19]/95 backdrop-blur-md p-3.5 rounded-xl border border-slate-800 text-xs text-slate-300 w-72 shadow-2xl pointer-events-none">
+          <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800/80">
+            <div>
+              <div className="text-[10px] uppercase font-mono font-bold tracking-wider text-emerald-400">
+                Hawkeye Ball Tracking
+              </div>
+              <div className="text-sm font-bold text-white">{selectedDelivery.bowler}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-base font-extrabold font-sports text-emerald-400 tabular-nums">
+                {selectedDelivery.speedKmh} <span className="text-[10px] font-sans font-normal text-slate-400">km/h</span>
+              </div>
+              <div className="text-[10px] font-mono text-slate-400">{selectedDelivery.type}</div>
+            </div>
           </div>
-          <div className="text-[11px] text-slate-400 mb-2 leading-relaxed">{selectedDelivery.description}</div>
-          <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
-            <span>Length: Good</span>
-            <span className="text-slate-600" aria-hidden="true">·</span>
-            <span className={selectedDelivery.hitStumps ? 'text-rose-400' : 'text-slate-400'}>
-              {selectedDelivery.hitStumps ? 'Wicket: Bowled' : 'Line: Outside Off'}
-            </span>
+
+          {/* DRS 3-Point Decision Mat */}
+          <div className="bg-slate-900/80 rounded-lg p-2.5 border border-slate-800 space-y-1.5 mb-2.5">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-slate-400">Pitching</span>
+              <span className={`font-mono font-bold ${drs.pitching === 'IN LINE' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                {drs.pitching}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-slate-400">Impact</span>
+              <span className={`font-mono font-bold ${drs.impact === 'IN LINE' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                {drs.impact}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-slate-400">Wickets</span>
+              <span className={`font-mono font-bold ${drs.wickets === 'HITTING' ? 'text-rose-400' : 'text-slate-300'}`}>
+                {drs.wickets}
+              </span>
+            </div>
+
+            <div className="pt-1.5 mt-1 border-t border-slate-800 flex items-center justify-between">
+              <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">DRS Verdict:</span>
+              <span
+                className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase tracking-wider ${
+                  drs.verdict === 'OUT'
+                    ? 'bg-rose-950/80 text-rose-300 border border-rose-700/60'
+                    : 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/60'
+                }`}
+              >
+                {drs.verdict}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono text-slate-400">
+            <div className="p-1.5 rounded bg-slate-900/60 border border-slate-800/80">
+              <span className="text-slate-500 block">Deviation</span>
+              <span className="text-slate-200 font-semibold">{drs.deviation}</span>
+            </div>
+            <div className="p-1.5 rounded bg-slate-900/60 border border-slate-800/80">
+              <span className="text-slate-500 block">Bounce Height</span>
+              <span className="text-slate-200 font-semibold">{drs.bounceHeight}</span>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Preset Camera Views Overlay */}
-      <div className="absolute top-16 right-4 z-10 bg-[#0b0f19]/90 backdrop-blur-md p-2.5 rounded-lg border border-slate-800 shadow-xl pointer-events-auto flex flex-col gap-2 w-64">
+      {/* Camera View Switcher (Top Right) */}
+      <div className="absolute top-16 right-4 z-10 bg-[#0b0f19]/90 backdrop-blur-md p-2.5 rounded-xl border border-slate-800 shadow-xl pointer-events-auto flex flex-col gap-2 w-60">
         <div className="flex items-center justify-between pb-1.5 border-b border-slate-800/80 px-1">
           <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-200">
             <Camera className="w-3.5 h-3.5 text-emerald-400" />
             <span>Preset Camera Views</span>
           </div>
-          <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Cinematic 3D</span>
-          </span>
+          <span className="text-[10px] font-mono text-emerald-400">Broadcast</span>
         </div>
 
         <div className="grid grid-cols-1 gap-1.5">
@@ -862,21 +1123,15 @@ export function CricketPitch3D() {
                 onClick={() => handleSelectCameraView(view.id)}
                 className={`flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-all ${
                   isActive
-                    ? 'bg-emerald-950/80 border border-emerald-600/60 text-emerald-300 font-semibold shadow-[0_0_12px_rgba(16,185,129,0.15)]'
+                    ? 'bg-emerald-950/80 border border-emerald-600/60 text-emerald-300 font-semibold'
                     : 'bg-slate-900/70 hover:bg-slate-850 border border-slate-800/80 text-slate-400 hover:text-slate-200'
                 }`}
                 title={view.sublabel}
               >
                 <div className="flex items-center gap-2">
-                  {view.id === 'birds_eye' && (
-                    <Eye className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
-                  )}
-                  {view.id === 'bowlers_end' && (
-                    <Target className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
-                  )}
-                  {view.id === 'umpire_view' && (
-                    <UserCheck className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
-                  )}
+                  {view.id === 'birds_eye' && <Eye className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />}
+                  {view.id === 'bowlers_end' && <Target className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />}
+                  {view.id === 'umpire_view' && <UserCheck className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />}
                   <span>{view.label}</span>
                 </div>
                 <span
@@ -892,13 +1147,9 @@ export function CricketPitch3D() {
             );
           })}
         </div>
-
-        <div className="text-[10px] text-slate-400 font-mono px-1 leading-tight">
-          {PRESET_CAMERA_VIEWS.find((v) => v.id === activeCameraView)?.sublabel}
-        </div>
       </div>
 
-      {/* Collapsible Bottom Dock (Floating above canvas) */}
+      {/* Collapsible Bottom Dock (Center Floating) */}
       <div
         className="absolute z-20 transition-all duration-300 ease-out"
         style={{
@@ -906,28 +1157,32 @@ export function CricketPitch3D() {
           left: '50%',
           transform: 'translateX(-50%)',
           width: 'calc(100% - 32px)',
-          maxWidth: '820px',
+          maxWidth: '860px',
         }}
       >
-        <div className="bg-[#0b0f19]/95 backdrop-blur-md border border-slate-800 rounded-lg p-3 shadow-xl flex flex-col gap-2">
+        <div className="bg-[#0b0f19]/95 backdrop-blur-md border border-slate-800 rounded-xl p-3 shadow-2xl flex flex-col gap-2">
           {/* Dock Top Handle & Collapse Toggle */}
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-2 text-xs font-semibold text-slate-300">
-              <span>Interactive Controls</span>
+              <Activity className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Interactive Delivery & Camera Controls</span>
               <span className="text-slate-600" aria-hidden="true">·</span>
-              <span className="text-slate-400 font-normal">Presets & Camera</span>
+              <span className="text-slate-400 font-normal">
+                {activeMode === 'trajectory' ? 'Select Delivery' : activeMode === 'wagon' ? 'Shot Breakdown' : 'Pitch Geometry'}
+              </span>
             </div>
             <button
               type="button"
               onClick={() => setIsDockCollapsed(!isDockCollapsed)}
-              className="text-slate-400 hover:text-slate-200 p-1 rounded hover:bg-slate-850 transition-colors"
+              aria-label={isDockCollapsed ? 'Expand 3D controls' : 'Collapse 3D controls'}
+              className="text-slate-400 hover:text-slate-200 p-1 rounded-md hover:bg-slate-850 transition-colors"
             >
               {isDockCollapsed ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>
           </div>
 
           {!isDockCollapsed && (
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1 border-t border-slate-800/80">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t border-slate-800/80">
               {/* Delivery Selector (in Trajectory Mode) */}
               {activeMode === 'trajectory' && (
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
@@ -935,17 +1190,15 @@ export function CricketPitch3D() {
                     <button
                       key={d.id}
                       type="button"
-                      onClick={() => {
-                        setSelectedDelivery(d);
-                        ballProgressRef.current = 0;
-                      }}
-                      className={`whitespace-nowrap px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                      onClick={() => handleSelectDelivery(d)}
+                      className={`whitespace-nowrap px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                         selectedDelivery.id === d.id
-                          ? 'bg-slate-800 text-white font-semibold'
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'bg-slate-900/80 border border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-850'
                       }`}
                     >
                       {d.name.split(' ')[1] || d.name}
+                      <span className="ml-1 text-[10px] font-mono opacity-80">({d.speedKmh}k)</span>
                     </button>
                   ))}
                 </div>
@@ -955,76 +1208,66 @@ export function CricketPitch3D() {
               {activeMode === 'wagon' && (
                 <div className="flex items-center gap-3 text-xs text-slate-300 overflow-x-auto">
                   <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-purple-500" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-purple-500" />
                     <span>Sixes (85m+)</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
                     <span>Fours (Boundary)</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-sky-400" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-sky-400" />
                     <span>1s & 2s</span>
                   </div>
                 </div>
               )}
 
-              {/* Camera Presets & Play/Pause */}
-              <div className="flex items-center gap-1.5 self-end sm:self-auto">
+              {/* Pitch Dimensions Info (in Pitch Mode) */}
+              {activeMode === 'pitch' && (
+                <div className="flex items-center gap-4 text-xs text-slate-300">
+                  <div>
+                    <span className="text-slate-500">Pitch:</span>{' '}
+                    <span className="font-semibold text-emerald-400">22 Yards (20.12m)</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Stump Height:</span>{' '}
+                    <span className="font-semibold text-sky-400">28 inches (71.1cm)</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Popping Crease:</span>{' '}
+                    <span className="font-semibold text-purple-400">4 Feet (1.22m)</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Media Controls (Play / Pause / Replay) */}
+              <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
                 <button
                   type="button"
-                  onClick={() => setIsPlaying(!isPlaying)}
-                  className="p-1.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 transition-colors border border-slate-800"
+                  onClick={() => {
+                    const nextPlaying = !isPlaying;
+                    setIsPlaying(nextPlaying);
+                    isPlayingRef.current = nextPlaying;
+                    sounds.playClick();
+                  }}
+                  className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 transition-colors border border-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                   title={isPlaying ? 'Pause Animation' : 'Play Animation'}
+                  aria-label={isPlaying ? 'Pause ball delivery animation' : 'Play ball delivery animation'}
                 >
-                  {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                  {isPlaying ? <Pause className="w-4 h-4 text-amber-400" /> : <Play className="w-4 h-4 text-emerald-400" />}
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     ballProgressRef.current = 0;
+                    resetBails();
+                    sounds.playClick();
                   }}
-                  className="p-1.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 transition-colors border border-slate-800"
+                  className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 transition-colors border border-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                   title="Replay Delivery"
+                  aria-label="Replay current ball delivery"
                 >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                </button>
-
-                <div className="h-4 w-[1px] bg-slate-800 mx-1" />
-
-                <span className="text-[11px] text-slate-500 font-medium">Angle:</span>
-                <button
-                  type="button"
-                  onClick={() => handleSelectCameraView('bowlers_end')}
-                  className={`px-2.5 py-0.5 rounded text-xs transition-colors ${
-                    activeCameraView === 'bowlers_end'
-                      ? 'bg-emerald-950/80 border border-emerald-600/60 text-emerald-300 font-semibold shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                  }`}
-                >
-                  Bowler's End
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSelectCameraView('birds_eye')}
-                  className={`px-2.5 py-0.5 rounded text-xs transition-colors ${
-                    activeCameraView === 'birds_eye'
-                      ? 'bg-emerald-950/80 border border-emerald-600/60 text-emerald-300 font-semibold shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                  }`}
-                >
-                  Bird's Eye
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSelectCameraView('umpire_view')}
-                  className={`px-2.5 py-0.5 rounded text-xs transition-colors ${
-                    activeCameraView === 'umpire_view'
-                      ? 'bg-emerald-950/80 border border-emerald-600/60 text-emerald-300 font-semibold shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                  }`}
-                >
-                  Umpire View
+                  <RotateCcw className="w-4 h-4" />
                 </button>
               </div>
             </div>
