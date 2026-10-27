@@ -12,15 +12,17 @@ import {
   Target,
   Camera,
   UserCheck,
-  CheckCircle2,
-  XCircle,
-  HelpCircle,
   Activity,
-  Maximize2,
+  Zap,
+  Flame,
+  Clock,
+  Sparkles,
+  ShieldAlert,
+  Sliders,
 } from 'lucide-react';
 import { sounds } from '../utils/audio';
 
-export type PresetCameraView = 'birds_eye' | 'bowlers_end' | 'umpire_view';
+export type PresetCameraView = 'birds_eye' | 'bowlers_end' | 'umpire_view' | 'stump_cam';
 
 export interface CameraViewConfig {
   id: PresetCameraView;
@@ -60,6 +62,15 @@ export const PRESET_CAMERA_VIEWS: CameraViewConfig[] = [
     target: new THREE.Vector3(0, 0.71, 10),
     spherical: { radius: 18, theta: Math.PI, phi: 1.48 },
   },
+  {
+    id: 'stump_cam',
+    label: 'Stump Cam',
+    badge: 'Impact Replay',
+    sublabel: 'Close-up camera behind striker stumps inspecting wicket collision',
+    position: new THREE.Vector3(0, 1.35, 6.8),
+    target: new THREE.Vector3(0, 0.65, 10.0),
+    spherical: { radius: 3.5, theta: Math.PI, phi: 1.38 },
+  },
 ];
 
 export interface DeliveryDrs {
@@ -70,6 +81,21 @@ export interface DeliveryDrs {
   deviation: string;
   releaseHeight: string;
   bounceHeight: string;
+}
+
+export interface ImpactInfo {
+  stump: string;
+  contactPoint: { x: number; y: number; z: number };
+  impactSpeedKmh: number;
+  type: 'BOWLED' | 'LBW_PAD' | 'BEATEN';
+  badge: string;
+  badgeColor: 'rose' | 'amber' | 'slate' | 'emerald';
+  title: string;
+  description: string;
+  bailsFly: boolean;
+  stumpHitName: 'Leg Stump' | 'Off Stump' | 'Middle Stump' | 'Pad' | 'Air';
+  normalizedStumpX: number; // -1 (off) to 1 (leg) for diagram
+  normalizedStumpY: number; // 0 (base) to 1 (bail)
 }
 
 export interface DeliveryPreset {
@@ -83,6 +109,7 @@ export interface DeliveryPreset {
   bounceIndex: number;
   hitStumps: boolean;
   drs: DeliveryDrs;
+  impactInfo: ImpactInfo;
 }
 
 export interface WagonShot {
@@ -97,32 +124,6 @@ export interface WagonShot {
 }
 
 export const DELIVERIES: DeliveryPreset[] = [
-  {
-    id: 'outswinger',
-    name: '144 km/h Lethal Outswinger',
-    speedKmh: 144,
-    type: 'Pace / Seam',
-    bowler: 'Jasprit Bumrah',
-    description: 'Pitches on middle, shapes away late beating the outside edge.',
-    curve: [
-      new THREE.Vector3(0, 2.1, -10),
-      new THREE.Vector3(0.05, 1.3, -5),
-      new THREE.Vector3(0.1, 0.08, 6.2), // pitch bounce point
-      new THREE.Vector3(0.45, 0.65, 8.5),
-      new THREE.Vector3(0.85, 0.72, 10), // beats bat
-    ],
-    bounceIndex: 2,
-    hitStumps: false,
-    drs: {
-      pitching: 'IN LINE',
-      impact: 'OUTSIDE OFF',
-      wickets: 'MISSING',
-      verdict: 'NOT OUT',
-      deviation: '+2.4° Away Seam',
-      releaseHeight: '2.10m',
-      bounceHeight: '0.65m',
-    },
-  },
   {
     id: 'yorker',
     name: '148 km/h Inswinging Yorker',
@@ -148,31 +149,59 @@ export const DELIVERIES: DeliveryPreset[] = [
       releaseHeight: '2.15m',
       bounceHeight: '0.35m',
     },
+    impactInfo: {
+      stump: 'Leg Stump (Base)',
+      contactPoint: { x: -0.28, y: 0.45, z: 10.0 },
+      impactSpeedKmh: 141,
+      type: 'BOWLED',
+      badge: 'WICKET · BOWLED',
+      badgeColor: 'rose',
+      title: 'Starc 148 km/h Inswinging Yorker',
+      description: 'Dipping yorker shatters the base of leg stump at 141 km/h. Both bails ejected 2.8m into the air.',
+      bailsFly: true,
+      stumpHitName: 'Leg Stump',
+      normalizedStumpX: 0.72,
+      normalizedStumpY: 0.32,
+    },
   },
   {
-    id: 'bouncer',
-    name: '142 km/h Sharp Bouncer',
-    speedKmh: 142,
-    type: 'Short Pitch',
-    bowler: 'Pat Cummins',
-    description: 'Digs in short halfway down the pitch, steep bounce over batsman helmet.',
+    id: 'outswinger',
+    name: '144 km/h Lethal Outswinger',
+    speedKmh: 144,
+    type: 'Pace / Seam',
+    bowler: 'Jasprit Bumrah',
+    description: 'Pitches on middle, shapes away late beating the outside edge.',
     curve: [
-      new THREE.Vector3(-0.1, 2.2, -10),
-      new THREE.Vector3(-0.05, 1.4, -6),
-      new THREE.Vector3(0.0, 0.08, 0.5), // short bounce
-      new THREE.Vector3(0.15, 1.6, 6.5),
-      new THREE.Vector3(0.25, 2.1, 10), // over shoulder
+      new THREE.Vector3(0, 2.1, -10),
+      new THREE.Vector3(0.05, 1.3, -5),
+      new THREE.Vector3(0.1, 0.08, 6.2), // pitch bounce point
+      new THREE.Vector3(0.45, 0.65, 8.5),
+      new THREE.Vector3(0.85, 0.72, 10), // beats bat
     ],
     bounceIndex: 2,
     hitStumps: false,
     drs: {
       pitching: 'IN LINE',
-      impact: 'IN LINE',
+      impact: 'OUTSIDE OFF',
       wickets: 'MISSING',
       verdict: 'NOT OUT',
-      deviation: '+1.1° Bounce Lift',
-      releaseHeight: '2.20m',
-      bounceHeight: '1.60m',
+      deviation: '+2.4° Away Seam',
+      releaseHeight: '2.10m',
+      bounceHeight: '0.65m',
+    },
+    impactInfo: {
+      stump: 'Beats Outside Edge',
+      contactPoint: { x: 0.85, y: 0.72, z: 10.0 },
+      impactSpeedKmh: 136,
+      type: 'BEATEN',
+      badge: 'BEATS OUTSIDE EDGE',
+      badgeColor: 'slate',
+      title: 'Bumrah 144 km/h Outswinger Miss',
+      description: 'Late deviation shapes 4.8cm past the outside edge. Wicketkeeper collects at waist height.',
+      bailsFly: false,
+      stumpHitName: 'Air',
+      normalizedStumpX: -1.35,
+      normalizedStumpY: 0.78,
     },
   },
   {
@@ -200,6 +229,60 @@ export const DELIVERIES: DeliveryPreset[] = [
       releaseHeight: '1.90m',
       bounceHeight: '0.50m',
     },
+    impactInfo: {
+      stump: 'Off Stump (Top Notch)',
+      contactPoint: { x: -0.12, y: 0.65, z: 10.0 },
+      impactSpeedKmh: 83,
+      type: 'BOWLED',
+      badge: 'WICKET · BOWLED',
+      badgeColor: 'rose',
+      title: 'Rashid Khan 89 km/h Googly Stump Impact',
+      description: 'Disguised googly cuts back sharply, clipping the top of off stump and dislodging off-bail.',
+      bailsFly: true,
+      stumpHitName: 'Off Stump',
+      normalizedStumpX: -0.72,
+      normalizedStumpY: 0.88,
+    },
+  },
+  {
+    id: 'bouncer',
+    name: '142 km/h Sharp Bouncer',
+    speedKmh: 142,
+    type: 'Short Pitch',
+    bowler: 'Pat Cummins',
+    description: 'Digs in short halfway down the pitch, steep bounce over batsman helmet.',
+    curve: [
+      new THREE.Vector3(-0.1, 2.2, -10),
+      new THREE.Vector3(-0.05, 1.4, -6),
+      new THREE.Vector3(0.0, 0.08, 0.5), // short bounce
+      new THREE.Vector3(0.15, 1.6, 6.5),
+      new THREE.Vector3(0.25, 2.1, 10), // over shoulder
+    ],
+    bounceIndex: 2,
+    hitStumps: false,
+    drs: {
+      pitching: 'IN LINE',
+      impact: 'IN LINE',
+      wickets: 'MISSING',
+      verdict: 'NOT OUT',
+      deviation: '+1.1° Bounce Lift',
+      releaseHeight: '2.20m',
+      bounceHeight: '1.60m',
+    },
+    impactInfo: {
+      stump: 'Over Wickets & Helmet',
+      contactPoint: { x: 0.25, y: 2.1, z: 10.0 },
+      impactSpeedKmh: 132,
+      type: 'BEATEN',
+      badge: 'BOUNCER · OVER STUMPS',
+      badgeColor: 'amber',
+      title: 'Cummins 142 km/h Bouncer Lift',
+      description: 'Steep bounce clears the stump line by 1.38m. Batsman ducks comfortably underneath.',
+      bailsFly: false,
+      stumpHitName: 'Air',
+      normalizedStumpX: 0.2,
+      normalizedStumpY: 1.8,
+    },
   },
   {
     id: 'offbreak',
@@ -226,6 +309,20 @@ export const DELIVERIES: DeliveryPreset[] = [
       releaseHeight: '2.00m',
       bounceHeight: '0.60m',
     },
+    impactInfo: {
+      stump: 'Front Pad (Knee Roll)',
+      contactPoint: { x: 0.1, y: 0.7, z: 10.0 },
+      impactSpeedKmh: 81,
+      type: 'LBW_PAD',
+      badge: 'LBW IMPACT · PAD IN-LINE',
+      badgeColor: 'amber',
+      title: 'Ashwin 86 km/h Off-Break Pad Impact',
+      description: 'Spins into the knee roll 54cm above turf in-line with middle stump. Umpire call on height.',
+      bailsFly: false,
+      stumpHitName: 'Pad',
+      normalizedStumpX: 0.15,
+      normalizedStumpY: 0.62,
+    },
   },
 ];
 
@@ -249,7 +346,12 @@ export function CricketPitch3D() {
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [isDockCollapsed, setIsDockCollapsed] = useState<boolean>(false);
   const [activeCameraView, setActiveCameraView] = useState<PresetCameraView>('bowlers_end');
-  const [selectedShot, setSelectedShot] = useState<WagonShot | null>(null);
+
+  // Impact Replay States
+  const [isSlowMo, setIsSlowMo] = useState<boolean>(false);
+  const [isImpactFrozen, setIsImpactFrozen] = useState<boolean>(false);
+  const [showImpactOverlay, setShowImpactOverlay] = useState<boolean>(true);
+  const [isImpactNear, setIsImpactNear] = useState<boolean>(false);
 
   // Mutable refs to prevent stale closure in animation loop
   const activeModeRef = useRef<'pitch' | 'trajectory' | 'wagon'>(activeMode);
@@ -258,6 +360,10 @@ export function CricketPitch3D() {
   selectedDeliveryRef.current = selectedDelivery;
   const isPlayingRef = useRef<boolean>(isPlaying);
   isPlayingRef.current = isPlaying;
+  const isSlowMoRef = useRef<boolean>(isSlowMo);
+  isSlowMoRef.current = isSlowMo;
+  const isImpactFrozenRef = useRef<boolean>(isImpactFrozen);
+  isImpactFrozenRef.current = isImpactFrozen;
 
   // Three.js scene refs
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -276,6 +382,12 @@ export function CricketPitch3D() {
   const stumpsGroupRef = useRef<THREE.Group | null>(null);
   const bailsMeshRef = useRef<THREE.Mesh[]>([]);
   const ballProgressRef = useRef<number>(0);
+
+  // 3D Impact Replay Shockwave & Laser Anchor Ref
+  const impactBeaconGroupRef = useRef<THREE.Group | null>(null);
+  const impactRingMeshRef = useRef<THREE.Mesh | null>(null);
+  const impactCoreMeshRef = useRef<THREE.Mesh | null>(null);
+  const impactAnchorLineRef = useRef<THREE.Line | null>(null);
 
   // Pre-cached splines for each delivery to prevent runtime allocation
   const curvesCacheRef = useRef<Map<string, THREE.CatmullRomCurve3>>(new Map());
@@ -301,7 +413,6 @@ export function CricketPitch3D() {
     if (!sceneRef.current) return;
     const scene = sceneRef.current;
 
-    // Remove existing Hawkeye beams if present
     if (hawkeyePreLineRef.current) scene.remove(hawkeyePreLineRef.current);
     if (hawkeyePostLineRef.current) scene.remove(hawkeyePostLineRef.current);
     if (hawkeyeProjectedLineRef.current) scene.remove(hawkeyeProjectedLineRef.current);
@@ -312,12 +423,10 @@ export function CricketPitch3D() {
       curvesCacheRef.current.set(delivery.id, curve);
     }
 
-    // Split into pre-bounce (bowler release -> bounce point) and post-bounce (bounce -> batsman/stump)
-    const bouncePointIndex = delivery.bounceIndex; // index 2
+    const bouncePointIndex = delivery.bounceIndex;
     const totalPoints = delivery.curve.length;
     const bounceT = bouncePointIndex / (totalPoints - 1);
 
-    // Pre-bounce curve points
     const prePoints: THREE.Vector3[] = [];
     const postPoints: THREE.Vector3[] = [];
     const projectedPoints: THREE.Vector3[] = [];
@@ -336,7 +445,6 @@ export function CricketPitch3D() {
       }
     }
 
-    // Projected continuation beyond batsman crease
     const lastPt = delivery.curve[delivery.curve.length - 1];
     const secondLastPt = delivery.curve[delivery.curve.length - 2];
     const dir = new THREE.Vector3().subVectors(lastPt, secondLastPt).normalize();
@@ -357,7 +465,7 @@ export function CricketPitch3D() {
     scene.add(preLine);
     hawkeyePreLineRef.current = preLine;
 
-    // Post-bounce beam (Neon Rose / Amber #ff0055 or #f59e0b)
+    // Post-bounce beam (Neon Rose / Amber)
     const postGeo = new THREE.BufferGeometry().setFromPoints(postPoints);
     const postMat = new THREE.LineBasicMaterial({
       color: delivery.hitStumps ? 0xff2e63 : 0xf59e0b,
@@ -369,7 +477,7 @@ export function CricketPitch3D() {
     scene.add(postLine);
     hawkeyePostLineRef.current = postLine;
 
-    // Projected path line (dashed / lower opacity)
+    // Projected path line
     const projGeo = new THREE.BufferGeometry().setFromPoints(projectedPoints);
     const projMat = new THREE.LineBasicMaterial({
       color: delivery.hitStumps ? 0xff2e63 : 0x94a3b8,
@@ -386,6 +494,22 @@ export function CricketPitch3D() {
       const bouncePt = delivery.curve[bouncePointIndex];
       bounceMarkerRef.current.position.set(bouncePt.x, 0.045, bouncePt.z);
       bounceMarkerRef.current.visible = true;
+    }
+
+    // Position impact beacon initially
+    if (impactBeaconGroupRef.current && delivery.impactInfo) {
+      const cp = delivery.impactInfo.contactPoint;
+      impactBeaconGroupRef.current.position.set(cp.x, cp.y, cp.z);
+      if (impactCoreMeshRef.current) {
+        (impactCoreMeshRef.current.material as THREE.MeshBasicMaterial).color.set(
+          delivery.hitStumps ? 0xff2e63 : 0xf59e0b
+        );
+      }
+      if (impactRingMeshRef.current) {
+        (impactRingMeshRef.current.material as THREE.MeshBasicMaterial).color.set(
+          delivery.hitStumps ? 0xff2e63 : 0xf59e0b
+        );
+      }
     }
   }, []);
 
@@ -412,6 +536,51 @@ export function CricketPitch3D() {
     isTransitioningCameraRef.current = true;
   };
 
+  // Impact Replay Actions
+  const handleTriggerImpactReplay = () => {
+    sounds.playClick();
+    setIsImpactFrozen(false);
+    isImpactFrozenRef.current = false;
+    setIsSlowMo(true);
+    isSlowMoRef.current = true;
+    setIsPlaying(true);
+    isPlayingRef.current = true;
+    ballProgressRef.current = 0.72; // Start right after bounce
+    resetBails();
+    handleSelectCameraView('stump_cam');
+  };
+
+  const handleFreezeAtImpact = () => {
+    sounds.playClick();
+    setIsImpactFrozen(true);
+    isImpactFrozenRef.current = true;
+    setIsPlaying(false);
+    isPlayingRef.current = false;
+    ballProgressRef.current = 0.98; // Exact impact frame
+    if (impactBeaconGroupRef.current) {
+      impactBeaconGroupRef.current.visible = true;
+    }
+    if (selectedDelivery.hitStumps && bailsMeshRef.current.length >= 2) {
+      bailsMeshRef.current[0].position.set(-0.03, 0.95, 0.1);
+      bailsMeshRef.current[0].rotation.set(0.8, 0.4, 1.2);
+      bailsMeshRef.current[1].position.set(0.08, 1.05, -0.1);
+      bailsMeshRef.current[1].rotation.set(-0.6, 0.7, -1.0);
+    }
+    handleSelectCameraView('stump_cam');
+  };
+
+  const handleResumeNormalSpeed = () => {
+    sounds.playClick();
+    setIsSlowMo(false);
+    isSlowMoRef.current = false;
+    setIsImpactFrozen(false);
+    isImpactFrozenRef.current = false;
+    setIsPlaying(true);
+    isPlayingRef.current = true;
+    resetBails();
+    handleSelectCameraView('bowlers_end');
+  };
+
   // Mount Three.js Scene
   useEffect(() => {
     if (!containerRef.current) return;
@@ -419,7 +588,6 @@ export function CricketPitch3D() {
     const width = container.clientWidth || 800;
     const height = container.clientHeight || 520;
 
-    // Detect software WebGL
     const isSoftwareGl = (() => {
       try {
         const gl = document.createElement('canvas').getContext('webgl2');
@@ -463,7 +631,7 @@ export function CricketPitch3D() {
 
     container.replaceChildren(renderer.domElement);
 
-    // 4. Balanced Studio Rig (Warm Key + Cool Fill + Pitch Rim Light)
+    // 4. Lighting Rig
     const keyLight = new THREE.DirectionalLight(0xfff5e0, 1.8);
     keyLight.position.set(15, 25, -15);
     keyLight.castShadow = !isSoftwareGl;
@@ -487,7 +655,7 @@ export function CricketPitch3D() {
     const hemiLight = new THREE.HemisphereLight(0x386641, 0x0f172a, 0.7);
     scene.add(hemiLight);
 
-    // 5. Procedural Textures & Field
+    // 5. Turf Texture & Field
     const turfCanvas = document.createElement('canvas');
     turfCanvas.width = 512;
     turfCanvas.height = 512;
@@ -506,7 +674,7 @@ export function CricketPitch3D() {
     turfTexture.repeat.set(8, 8);
     turfTexture.colorSpace = THREE.SRGBColorSpace;
 
-    // Field Oval
+    // Field Cylinder
     const fieldGeo = new THREE.CylinderGeometry(40, 41, 0.4, 48);
     const fieldMat = new THREE.MeshStandardMaterial({
       map: turfTexture,
@@ -577,7 +745,7 @@ export function CricketPitch3D() {
     createCreaseMarking(0.08, 2.4, -1.3, -9.4);
     createCreaseMarking(0.08, 2.4, 1.3, -9.4);
 
-    // Pitch Dimensions Visualization Group (active in 'pitch' mode)
+    // Pitch Dimensions Visualization Group
     const pitchDimGroup = new THREE.Group();
     const dimLineGeo = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(-1.7, 0.1, -10),
@@ -651,7 +819,7 @@ export function CricketPitch3D() {
     buildSightScreen(36);
     buildSightScreen(-36);
 
-    // Stadium Floodlights
+    // Floodlight Towers
     const towerPositions = [
       { x: 30, z: 25 },
       { x: -30, z: 25 },
@@ -694,7 +862,7 @@ export function CricketPitch3D() {
     scene.add(ballMesh);
     ballMeshRef.current = ballMesh;
 
-    // Pitch Bounce Contact Marker
+    // Pitch Bounce Marker
     const bounceMarkerGeo = new THREE.RingGeometry(0.08, 0.35, 24);
     const bounceMarkerMat = new THREE.MeshBasicMaterial({
       color: 0x38bdf8,
@@ -707,6 +875,54 @@ export function CricketPitch3D() {
     bounceMarker.position.y = 0.05;
     scene.add(bounceMarker);
     bounceMarkerRef.current = bounceMarker;
+
+    // 12. Visual Impact Replay Beacon & Shockwave Group
+    const impactGroup = new THREE.Group();
+
+    // Center glowing contact core
+    const coreGeo = new THREE.SphereGeometry(0.14, 16, 16);
+    const coreMat = new THREE.MeshBasicMaterial({
+      color: 0xff2e63,
+      transparent: true,
+      opacity: 0.9,
+    });
+    const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+    impactGroup.add(coreMesh);
+    impactCoreMeshRef.current = coreMesh;
+
+    // Expanding shockwave ripple ring
+    const ringGeo = new THREE.RingGeometry(0.08, 0.42, 32);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0xff2e63,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.85,
+    });
+    const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+    ringMesh.rotation.x = -Math.PI / 2;
+    impactGroup.add(ringMesh);
+    impactRingMeshRef.current = ringMesh;
+
+    // Vertical anchor laser line connecting contact point to pitch surface
+    const anchorGeo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0, -0.6, 0),
+    ]);
+    const anchorMat = new THREE.LineDashedMaterial({
+      color: 0x38bdf8,
+      dashSize: 0.05,
+      gapSize: 0.03,
+      transparent: true,
+      opacity: 0.75,
+    });
+    const anchorLine = new THREE.Line(anchorGeo, anchorMat);
+    anchorLine.computeLineDistances();
+    impactGroup.add(anchorLine);
+    impactAnchorLineRef.current = anchorLine;
+
+    impactGroup.visible = false;
+    scene.add(impactGroup);
+    impactBeaconGroupRef.current = impactGroup;
 
     // Wagon Wheel Group
     const wagonGroup = new THREE.Group();
@@ -783,7 +999,7 @@ export function CricketPitch3D() {
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       cameraSphericalRef.current.radius = Math.max(
-        8,
+        3.0,
         Math.min(60, cameraSphericalRef.current.radius + e.deltaY * 0.03)
       );
       const { radius, theta, phi } = cameraSphericalRef.current;
@@ -809,14 +1025,13 @@ export function CricketPitch3D() {
     };
     window.addEventListener('resize', onResize);
 
-    // Animation Loop with robust timing guards & software-WebGL pacing
+    // Render & Animation Loop
     let lastTime = performance.now();
     let isDisposed = false;
 
     const animate = (currentTime: number) => {
       if (isDisposed) return;
 
-      // Safe delta time calculation (guarded against negative or huge values on tab blur)
       const rawDelta = (currentTime - lastTime) / 1000;
       const deltaTime = Math.max(0, Math.min(0.08, isNaN(rawDelta) ? 0.016 : rawDelta));
       lastTime = currentTime;
@@ -824,22 +1039,35 @@ export function CricketPitch3D() {
       const currentMode = activeModeRef.current;
       const currentPlaying = isPlayingRef.current;
       const currentDelivery = selectedDeliveryRef.current;
+      const isSlow = isSlowMoRef.current;
+      const isFrozen = isImpactFrozenRef.current;
 
       // Ball Hawkeye physics animation
-      if (ballMeshRef.current && currentMode === 'trajectory' && currentPlaying) {
-        const speed = currentDelivery.speedKmh || 140;
-        ballProgressRef.current += deltaTime * (speed / 140) * 0.65;
+      if (ballMeshRef.current && currentMode === 'trajectory') {
+        if (currentPlaying && !isFrozen) {
+          const speed = currentDelivery.speedKmh || 140;
+          const speedFactor = isSlow ? 0.22 : 0.65;
+          ballProgressRef.current += deltaTime * (speed / 140) * speedFactor;
 
-        if (ballProgressRef.current >= 1.0) {
-          ballProgressRef.current = 0;
-          resetBails();
+          if (ballProgressRef.current >= 1.0) {
+            if (isSlow) {
+              // In Slow-Mo replay, loop the impact segment smoothly from post-bounce
+              ballProgressRef.current = 0.68;
+              resetBails();
+            } else {
+              ballProgressRef.current = 0;
+              resetBails();
+            }
+          }
         }
 
-        // STRICT CLAMP to [0, 1] to prevent CatmullRomCurve3 out-of-bounds undefined reading 'x' crash
         const t = Math.max(
           0,
           Math.min(1, isNaN(ballProgressRef.current) ? 0 : ballProgressRef.current)
         );
+
+        // Near-impact state notification
+        setIsImpactNear(t >= 0.90);
 
         let activeCurve = curvesCacheRef.current.get(currentDelivery.id);
         if (!activeCurve) {
@@ -851,21 +1079,50 @@ export function CricketPitch3D() {
           const pt = activeCurve.getPoint(t);
           if (pt && !isNaN(pt.x)) {
             ballMeshRef.current.position.copy(pt);
-            ballMeshRef.current.rotation.x += 0.25;
-            ballMeshRef.current.rotation.z += 0.15;
+            ballMeshRef.current.rotation.x += isSlow ? 0.08 : 0.25;
+            ballMeshRef.current.rotation.z += isSlow ? 0.05 : 0.15;
           }
         } catch {
           // Graceful fallback
         }
 
-        // Bowled delivery stump collision & bails flight
-        if (currentDelivery.hitStumps && t > 0.94 && bailsMeshRef.current.length >= 2) {
-          bailsMeshRef.current[0].position.y += 0.04;
-          bailsMeshRef.current[0].position.x += 0.03;
-          bailsMeshRef.current[0].rotation.x += 0.3;
-          bailsMeshRef.current[1].position.y += 0.05;
-          bailsMeshRef.current[1].position.x -= 0.04;
-          bailsMeshRef.current[1].rotation.z += 0.4;
+        // Visual Impact Shockwave Beacon triggering at impact (t >= 0.92)
+        if (impactBeaconGroupRef.current && currentDelivery.impactInfo) {
+          const cp = currentDelivery.impactInfo.contactPoint;
+          if (t >= 0.92 || isFrozen) {
+            impactBeaconGroupRef.current.position.set(cp.x, cp.y, cp.z);
+            impactBeaconGroupRef.current.visible = true;
+
+            // Animate shockwave ring expansion & pulse
+            if (impactRingMeshRef.current) {
+              const shockT = (t - 0.92) / 0.08;
+              const scale = 1.0 + Math.sin(shockT * Math.PI) * 1.8;
+              impactRingMeshRef.current.scale.set(scale, scale, scale);
+              (impactRingMeshRef.current.material as THREE.MeshBasicMaterial).opacity = Math.max(
+                0.2,
+                1.0 - shockT * 0.7
+              );
+            }
+
+            // Adjust vertical laser height down to pitch
+            if (impactAnchorLineRef.current) {
+              impactAnchorLineRef.current.scale.set(1, cp.y - 0.04, 1);
+              impactAnchorLineRef.current.computeLineDistances();
+            }
+          } else {
+            impactBeaconGroupRef.current.visible = false;
+          }
+        }
+
+        // Bowled delivery stump collision & flying bails
+        if (currentDelivery.hitStumps && (t > 0.94 || isFrozen) && bailsMeshRef.current.length >= 2) {
+          const bStep = isSlow ? 0.015 : 0.04;
+          bailsMeshRef.current[0].position.y += bStep;
+          bailsMeshRef.current[0].position.x += bStep * 0.8;
+          bailsMeshRef.current[0].rotation.x += isSlow ? 0.08 : 0.3;
+          bailsMeshRef.current[1].position.y += bStep * 1.2;
+          bailsMeshRef.current[1].position.x -= bStep * 0.9;
+          bailsMeshRef.current[1].rotation.z += isSlow ? 0.1 : 0.4;
         }
       }
 
@@ -886,7 +1143,6 @@ export function CricketPitch3D() {
       renderer.render(scene, camera);
 
       if (isSoftwareGl) {
-        // Paced software-WebGL frame schedule to avoid starving CPU & Playwright
         window.setTimeout(() => {
           if (!isDisposed) {
             animFrameRef.current = requestAnimationFrame(animate);
@@ -938,6 +1194,9 @@ export function CricketPitch3D() {
     if (bounceMarkerRef.current) {
       bounceMarkerRef.current.visible = activeMode === 'trajectory';
     }
+    if (impactBeaconGroupRef.current) {
+      impactBeaconGroupRef.current.visible = false;
+    }
     if (hawkeyePreLineRef.current) {
       hawkeyePreLineRef.current.visible = activeMode === 'trajectory';
     }
@@ -967,12 +1226,19 @@ export function CricketPitch3D() {
     setSelectedDelivery(delivery);
     selectedDeliveryRef.current = delivery;
     ballProgressRef.current = 0;
+    setIsSlowMo(false);
+    isSlowMoRef.current = false;
+    setIsImpactFrozen(false);
+    isImpactFrozenRef.current = false;
+    setIsPlaying(true);
+    isPlayingRef.current = true;
     resetBails();
     updateHawkeyeBeam(delivery);
     sounds.playClick();
   };
 
   const drs = selectedDelivery.drs;
+  const impact = selectedDelivery.impactInfo;
 
   return (
     <div className="relative w-full h-[620px] bg-[#070b13] rounded-xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col">
@@ -1037,7 +1303,7 @@ export function CricketPitch3D() {
         </div>
       </div>
 
-      {/* Hawkeye DRS Decision Panel (Authentic Broadcast Graphics) */}
+      {/* Hawkeye DRS Decision Panel (Left Flank) */}
       {activeMode === 'trajectory' && (
         <div className="absolute top-16 left-4 z-10 bg-[#0b0f19]/95 backdrop-blur-md p-3.5 rounded-xl border border-slate-800 text-xs text-slate-300 w-72 shadow-2xl pointer-events-none">
           <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800/80">
@@ -1103,51 +1369,180 @@ export function CricketPitch3D() {
         </div>
       )}
 
-      {/* Camera View Switcher (Top Right) */}
-      <div className="absolute top-16 right-4 z-10 bg-[#0b0f19]/90 backdrop-blur-md p-2.5 rounded-xl border border-slate-800 shadow-xl pointer-events-auto flex flex-col gap-2 w-60">
-        <div className="flex items-center justify-between pb-1.5 border-b border-slate-800/80 px-1">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-200">
-            <Camera className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Preset Camera Views</span>
-          </div>
-          <span className="text-[10px] font-mono text-emerald-400">Broadcast</span>
-        </div>
-
-        <div className="grid grid-cols-1 gap-1.5">
-          {PRESET_CAMERA_VIEWS.map((view) => {
-            const isActive = activeCameraView === view.id;
-            return (
-              <button
-                key={view.id}
-                type="button"
-                onClick={() => handleSelectCameraView(view.id)}
-                className={`flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-all ${
-                  isActive
-                    ? 'bg-emerald-950/80 border border-emerald-600/60 text-emerald-300 font-semibold'
-                    : 'bg-slate-900/70 hover:bg-slate-850 border border-slate-800/80 text-slate-400 hover:text-slate-200'
-                }`}
-                title={view.sublabel}
-              >
-                <div className="flex items-center gap-2">
-                  {view.id === 'birds_eye' && <Eye className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />}
-                  {view.id === 'bowlers_end' && <Target className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />}
-                  {view.id === 'umpire_view' && <UserCheck className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />}
-                  <span>{view.label}</span>
+      {/* Visual 'Impact Replay' Broadcast HUD Overlay (Top Right) */}
+      {activeMode === 'trajectory' && showImpactOverlay && (
+        <div className="absolute top-16 right-4 z-20 bg-[#0b0f19]/95 backdrop-blur-md p-3.5 rounded-xl border border-slate-800 text-xs text-slate-300 w-80 shadow-2xl pointer-events-auto animate-in fade-in duration-200">
+          <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800/80">
+            <div className="flex items-center gap-1.5">
+              <div className="p-1 rounded bg-rose-500/20 text-rose-400">
+                <Flame className="w-3.5 h-3.5" />
+              </div>
+              <div>
+                <div className="text-[10px] uppercase font-mono font-bold tracking-wider text-rose-400 flex items-center gap-1.5">
+                  <span>Impact Replay</span>
+                  <span className="text-slate-600">·</span>
+                  <span className="text-slate-400 font-normal">Wicket Cam</span>
                 </div>
-                <span
-                  className={`text-[9px] font-mono px-1.5 py-0.5 rounded uppercase tracking-wider ${
-                    isActive
-                      ? 'bg-emerald-900/90 text-emerald-200 border border-emerald-700/80'
-                      : 'bg-slate-950 text-slate-500'
-                  }`}
-                >
-                  {view.badge}
+                <div className="text-xs font-bold text-white truncate max-w-[170px]">
+                  {impact.title}
+                </div>
+              </div>
+            </div>
+
+            <span
+              className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase tracking-wider border ${
+                impact.type === 'BOWLED'
+                  ? 'bg-rose-950/90 text-rose-300 border-rose-700/70 shadow-[0_0_8px_rgba(244,63,94,0.3)]'
+                  : impact.type === 'LBW_PAD'
+                  ? 'bg-amber-950/90 text-amber-300 border-amber-700/70'
+                  : 'bg-slate-900 text-slate-400 border-slate-800'
+              }`}
+            >
+              {impact.badge}
+            </span>
+          </div>
+
+          {/* 2D Graphical Wicket Target Diagram */}
+          <div className="relative bg-slate-950/80 rounded-lg p-3 border border-slate-800/90 flex items-center justify-between gap-3 mb-2.5">
+            {/* Stumps Illustration */}
+            <div className="relative w-28 h-20 bg-slate-900/60 rounded border border-slate-800 flex items-end justify-center pb-2 px-3 overflow-hidden">
+              {/* Ground level line */}
+              <div className="absolute bottom-1.5 left-2 right-2 h-0.5 bg-slate-700" />
+              
+              {/* Bails on top */}
+              <div className="absolute top-4 left-6 right-6 h-1 bg-amber-500 rounded-sm" />
+
+              {/* 3 Stumps */}
+              <div className="flex items-end justify-between w-full h-14 z-10 px-1">
+                {/* Off Stump */}
+                <div className="w-2.5 h-14 bg-gradient-to-t from-amber-800 to-amber-600 rounded-t-sm relative">
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[8px] font-mono text-slate-400 font-semibold">
+                    Off
+                  </span>
+                </div>
+                {/* Middle Stump */}
+                <div className="w-2.5 h-14 bg-gradient-to-t from-amber-800 to-amber-600 rounded-t-sm relative">
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[8px] font-mono text-slate-400 font-semibold">
+                    Mid
+                  </span>
+                </div>
+                {/* Leg Stump */}
+                <div className="w-2.5 h-14 bg-gradient-to-t from-amber-800 to-amber-600 rounded-t-sm relative">
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[8px] font-mono text-slate-400 font-semibold">
+                    Leg
+                  </span>
+                </div>
+              </div>
+
+              {/* Illuminated Target Crosshair Point of Impact */}
+              <div
+                className="absolute z-20 pointer-events-none transition-all duration-300"
+                style={{
+                  left: `${Math.max(10, Math.min(90, 50 + impact.normalizedStumpX * 36))}%`,
+                  bottom: `${Math.max(8, Math.min(85, impact.normalizedStumpY * 70))}%`,
+                  transform: 'translate(-50%, 50%)',
+                }}
+              >
+                <div className="relative flex items-center justify-center">
+                  <span className="w-5 h-5 rounded-full border-2 border-rose-500 bg-rose-500/30 animate-ping absolute" />
+                  <span className="w-3.5 h-3.5 rounded-full border border-white bg-rose-500 shadow-md flex items-center justify-center">
+                    <span className="w-1 h-1 bg-white rounded-full" />
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Impact Telemetry Readout */}
+            <div className="flex-1 space-y-1 text-[11px] font-mono">
+              <div className="text-slate-400">
+                Hit Target:{' '}
+                <strong className={impact.bailsFly ? 'text-rose-400' : 'text-slate-200'}>
+                  {impact.stump}
+                </strong>
+              </div>
+              <div className="text-slate-400">
+                Height:{' '}
+                <span className="text-emerald-400 font-bold">
+                  {impact.contactPoint.y.toFixed(2)}m
                 </span>
+              </div>
+              <div className="text-slate-400">
+                Impact Speed:{' '}
+                <span className="text-amber-400 font-bold">
+                  {impact.impactSpeedKmh} km/h
+                </span>
+              </div>
+              <div className="text-[10px] text-slate-500 pt-0.5">
+                Coords: [{impact.contactPoint.x.toFixed(2)}, {impact.contactPoint.y.toFixed(2)}, {impact.contactPoint.z.toFixed(1)}]
+              </div>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-slate-400 mb-3 leading-relaxed">
+            {impact.description}
+          </p>
+
+          {/* Interactive Slow-Mo & Impact Camera Controls */}
+          <div className="space-y-1.5 pt-1 border-t border-slate-800/80">
+            <div className="flex items-center justify-between text-[10px] uppercase font-mono text-slate-400 font-semibold px-0.5">
+              <span>Replay Tools</span>
+              <span className="text-emerald-400">
+                {isImpactFrozen ? 'Frozen at Impact' : isSlowMo ? 'Slow-Mo 0.25x' : 'Live Speed 1.0x'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                type="button"
+                onClick={handleTriggerImpactReplay}
+                className={`px-2.5 py-1.5 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                  isSlowMo && !isImpactFrozen
+                    ? 'bg-rose-950 border border-rose-600 text-rose-200 shadow-sm'
+                    : 'bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300'
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5 text-rose-400" />
+                <span>Slow-Mo Replay</span>
               </button>
-            );
-          })}
+
+              <button
+                type="button"
+                onClick={handleFreezeAtImpact}
+                className={`px-2.5 py-1.5 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                  isImpactFrozen
+                    ? 'bg-amber-950 border border-amber-600 text-amber-200 shadow-sm'
+                    : 'bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5 text-amber-400" />
+                <span>Freeze Impact</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSelectCameraView('stump_cam')}
+                className={`px-2.5 py-1.5 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                  activeCameraView === 'stump_cam'
+                    ? 'bg-emerald-950 border border-emerald-600 text-emerald-300 shadow-sm'
+                    : 'bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300'
+                }`}
+              >
+                <Camera className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Stump Cam</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleResumeNormalSpeed}
+                className="px-2.5 py-1.5 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 hover:text-white transition-all"
+              >
+                <Play className="w-3.5 h-3.5 text-slate-400" />
+                <span>Resume Normal</span>
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Collapsible Bottom Dock (Center Floating) */}
       <div
@@ -1157,7 +1552,7 @@ export function CricketPitch3D() {
           left: '50%',
           transform: 'translateX(-50%)',
           width: 'calc(100% - 32px)',
-          maxWidth: '860px',
+          maxWidth: '890px',
         }}
       >
         <div className="bg-[#0b0f19]/95 backdrop-blur-md border border-slate-800 rounded-xl p-3 shadow-2xl flex flex-col gap-2">
@@ -1171,14 +1566,31 @@ export function CricketPitch3D() {
                 {activeMode === 'trajectory' ? 'Select Delivery' : activeMode === 'wagon' ? 'Shot Breakdown' : 'Pitch Geometry'}
               </span>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsDockCollapsed(!isDockCollapsed)}
-              aria-label={isDockCollapsed ? 'Expand 3D controls' : 'Collapse 3D controls'}
-              className="text-slate-400 hover:text-slate-200 p-1 rounded-md hover:bg-slate-850 transition-colors"
-            >
-              {isDockCollapsed ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </button>
+            
+            <div className="flex items-center gap-2">
+              {activeMode === 'trajectory' && (
+                <button
+                  type="button"
+                  onClick={() => setShowImpactOverlay(!showImpactOverlay)}
+                  className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors flex items-center gap-1 ${
+                    showImpactOverlay
+                      ? 'bg-rose-950/80 text-rose-300 border border-rose-700/60'
+                      : 'bg-slate-900 text-slate-400 border border-slate-800'
+                  }`}
+                >
+                  <Flame className="w-3 h-3 text-rose-400" />
+                  <span>Impact Replay HUD</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setIsDockCollapsed(!isDockCollapsed)}
+                aria-label={isDockCollapsed ? 'Expand 3D controls' : 'Collapse 3D controls'}
+                className="text-slate-400 hover:text-slate-200 p-1 rounded-md hover:bg-slate-850 transition-colors"
+              >
+                {isDockCollapsed ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
 
           {!isDockCollapsed && (
@@ -1191,14 +1603,15 @@ export function CricketPitch3D() {
                       key={d.id}
                       type="button"
                       onClick={() => handleSelectDelivery(d)}
-                      className={`whitespace-nowrap px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      className={`whitespace-nowrap px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${
                         selectedDelivery.id === d.id
                           ? 'bg-emerald-600 text-white shadow-sm'
                           : 'bg-slate-900/80 border border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-850'
                       }`}
                     >
-                      {d.name.split(' ')[1] || d.name}
-                      <span className="ml-1 text-[10px] font-mono opacity-80">({d.speedKmh}k)</span>
+                      {d.hitStumps && <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />}
+                      <span>{d.name.split(' ')[1] || d.name}</span>
+                      <span className="text-[10px] font-mono opacity-80">({d.speedKmh}k)</span>
                     </button>
                   ))}
                 </div>
@@ -1240,7 +1653,7 @@ export function CricketPitch3D() {
                 </div>
               )}
 
-              {/* Media Controls (Play / Pause / Replay) */}
+              {/* Media & Camera Angle Controls */}
               <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
                 <button
                   type="button"
@@ -1250,7 +1663,7 @@ export function CricketPitch3D() {
                     isPlayingRef.current = nextPlaying;
                     sounds.playClick();
                   }}
-                  className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 transition-colors border border-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  className="p-2 rounded-lg bg-slate-900 hover:bg-slate-850 text-slate-200 transition-colors border border-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                   title={isPlaying ? 'Pause Animation' : 'Play Animation'}
                   aria-label={isPlaying ? 'Pause ball delivery animation' : 'Play ball delivery animation'}
                 >
@@ -1263,12 +1676,51 @@ export function CricketPitch3D() {
                     resetBails();
                     sounds.playClick();
                   }}
-                  className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 transition-colors border border-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  className="p-2 rounded-lg bg-slate-900 hover:bg-slate-850 text-slate-200 transition-colors border border-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                   title="Replay Delivery"
                   aria-label="Replay current ball delivery"
                 >
                   <RotateCcw className="w-4 h-4" />
                 </button>
+
+                <div className="h-4 w-[1px] bg-slate-800 mx-1" />
+
+                {/* Quick Camera Preset Buttons */}
+                <div className="hidden sm:flex items-center gap-1 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectCameraView('bowlers_end')}
+                    className={`px-2 py-1 rounded transition-colors ${
+                      activeCameraView === 'bowlers_end'
+                        ? 'bg-emerald-950/80 border border-emerald-600/60 text-emerald-300 font-semibold'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                    }`}
+                  >
+                    Bowler
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectCameraView('stump_cam')}
+                    className={`px-2 py-1 rounded transition-colors ${
+                      activeCameraView === 'stump_cam'
+                        ? 'bg-rose-950/80 border border-rose-600/60 text-rose-300 font-semibold'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                    }`}
+                  >
+                    Stump Cam
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectCameraView('birds_eye')}
+                    className={`px-2 py-1 rounded transition-colors ${
+                      activeCameraView === 'birds_eye'
+                        ? 'bg-emerald-950/80 border border-emerald-600/60 text-emerald-300 font-semibold'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                    }`}
+                  >
+                    Aerial
+                  </button>
+                </div>
               </div>
             </div>
           )}

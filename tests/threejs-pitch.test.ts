@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { TestResult } from './sqlite-wasm.test';
-import { PRESET_CAMERA_VIEWS } from '../src/components/CricketPitch3D';
+import { PRESET_CAMERA_VIEWS, DELIVERIES } from '../src/components/CricketPitch3D';
 
 export async function runThreeJsPitchTests(): Promise<TestResult[]> {
   const results: TestResult[] = [];
@@ -9,8 +9,6 @@ export async function runThreeJsPitchTests(): Promise<TestResult[]> {
   {
     const start = performance.now();
     try {
-      // THREE.PCFSoftShadowMap was removed in Three.js v0.186+
-      // Verify PCFShadowMap exists and is used
       if (typeof THREE.PCFShadowMap !== 'number') {
         throw new Error('THREE.PCFShadowMap is not defined');
       }
@@ -58,7 +56,6 @@ export async function runThreeJsPitchTests(): Promise<TestResult[]> {
       const spline = new THREE.CatmullRomCurve3(curveVectors);
       const length = spline.getLength();
 
-      // Test bounce calculation
       const bouncePt = spline.getPoint(0.7);
       if (!bouncePt || typeof bouncePt.y !== 'number') {
         throw new Error('Failed to sample spline trajectory point');
@@ -88,8 +85,8 @@ export async function runThreeJsPitchTests(): Promise<TestResult[]> {
   {
     const start = performance.now();
     try {
-      if (!Array.isArray(PRESET_CAMERA_VIEWS) || PRESET_CAMERA_VIEWS.length !== 3) {
-        throw new Error(`Expected 3 camera view presets, found ${PRESET_CAMERA_VIEWS?.length}`);
+      if (!Array.isArray(PRESET_CAMERA_VIEWS) || PRESET_CAMERA_VIEWS.length < 3) {
+        throw new Error(`Expected at least 3 camera view presets, found ${PRESET_CAMERA_VIEWS?.length}`);
       }
 
       const birdsEye = PRESET_CAMERA_VIEWS.find((v) => v.id === 'birds_eye');
@@ -138,6 +135,52 @@ export async function runThreeJsPitchTests(): Promise<TestResult[]> {
     } catch (e: any) {
       results.push({
         name: "Preset Camera Views (Bird's Eye, Bowler's End, Umpire View) & Cinematic Lerp",
+        passed: false,
+        durationMs: Number((performance.now() - start).toFixed(2)),
+        error: e.message,
+      });
+    }
+  }
+
+  // Test 4: Verify Visual Impact Replay Overlay & Stump Collision Telemetry
+  {
+    const start = performance.now();
+    try {
+      const yorker = DELIVERIES.find((d) => d.id === 'yorker');
+      const googly = DELIVERIES.find((d) => d.id === 'googly');
+
+      if (!yorker?.impactInfo || !googly?.impactInfo) {
+        throw new Error('Wicket deliveries missing impactInfo telemetry configuration');
+      }
+
+      if (yorker.impactInfo.type !== 'BOWLED' || !yorker.impactInfo.bailsFly) {
+        throw new Error('Yorker delivery must be configured as BOWLED with bailsFly=true');
+      }
+
+      const cp = yorker.impactInfo.contactPoint;
+      if (Math.abs(cp.z - 10.0) > 0.5 || cp.y < 0.1 || cp.y > 1.2) {
+        throw new Error(`Yorker contact coordinates out of expected stump impact bounds: ${JSON.stringify(cp)}`);
+      }
+
+      if (yorker.impactInfo.impactSpeedKmh < 100) {
+        throw new Error('Yorker impact speed should reflect high pace');
+      }
+
+      results.push({
+        name: 'Visual Impact Replay & Stump Collision Telemetry',
+        passed: true,
+        durationMs: Number((performance.now() - start).toFixed(2)),
+        details: {
+          yorkerStumpHit: yorker.impactInfo.stump,
+          contactPoint: cp,
+          googlyStumpHit: googly.impactInfo.stump,
+          impactSpeed: `${yorker.impactInfo.impactSpeedKmh} km/h`,
+          bailsDislodged: true,
+        },
+      });
+    } catch (e: any) {
+      results.push({
+        name: 'Visual Impact Replay & Stump Collision Telemetry',
         passed: false,
         durationMs: Number((performance.now() - start).toFixed(2)),
         error: e.message,
