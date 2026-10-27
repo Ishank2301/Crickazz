@@ -13,12 +13,37 @@ import { Match } from './types/cricket';
 import { Sparkles, Eye, Target, Compass, Layers, Activity } from 'lucide-react';
 import { sounds } from './utils/audio';
 import { warmupDatabase } from './services/db';
+import { useKeyboardShortcuts, TabId } from './hooks/useKeyboardShortcuts';
+import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<string>('home');
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [matches, setMatches] = useState<Match[]>(INITIAL_MATCHES);
   const [selectedMatchId, setSelectedMatchId] = useState<string>(INITIAL_MATCHES[0].id);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
+  const [shortcutToast, setShortcutToast] = useState<{ key: string; label: string } | null>(null);
+
+  // Global Keyboard Navigation Hook
+  useKeyboardShortcuts({
+    activeTab,
+    onNavigate: (tab: TabId) => {
+      setActiveTab(tab);
+    },
+    onToggleHelp: () => {
+      setIsShortcutsOpen((prev) => !prev);
+    },
+    onCloseHelp: () => {
+      setIsShortcutsOpen(false);
+    },
+    isHelpOpen: isShortcutsOpen,
+    onShortcutTriggered: ({ key, label }) => {
+      setShortcutToast({ key, label });
+      setTimeout(() => {
+        setShortcutToast((current) => (current?.key === key ? null : current));
+      }, 1800);
+    },
+  });
 
   const handleUpdateMatch = (updated: Match) => {
     setMatches((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
@@ -44,6 +69,32 @@ export function App() {
         setActiveTab={setActiveTab}
         isMuted={isMuted}
         setIsMuted={setIsMuted}
+        onOpenShortcuts={() => setIsShortcutsOpen(true)}
+      />
+
+      {/* Global Shortcut Notification Toast */}
+      {shortcutToast && (
+        <div className="fixed bottom-6 right-6 z-50 pointer-events-none animate-in fade-in slide-in-from-bottom-2 duration-150">
+          <div className="bg-slate-900/95 border border-emerald-500/50 text-slate-100 px-3.5 py-2 rounded-lg shadow-xl shadow-black/50 flex items-center gap-2.5 backdrop-blur-md">
+            <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-emerald-400 font-mono text-xs font-bold">
+              {shortcutToast.key}
+            </kbd>
+            <span className="text-xs font-medium">
+              Switched to <strong className="text-emerald-400">{shortcutToast.label}</strong>
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Keyboard Shortcuts Help Modal */}
+      <KeyboardShortcutsModal
+        isOpen={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
+        activeTab={activeTab}
+        onSelectTab={(tab) => {
+          setActiveTab(tab);
+          setIsShortcutsOpen(false);
+        }}
       />
 
       {/* Horizontal Live Matches Ticker */}

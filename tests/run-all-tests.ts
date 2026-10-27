@@ -3,6 +3,7 @@ import { runLatencyBenchmarkTests } from './latency-benchmarks.test';
 import { runThreeJsPitchTests } from './threejs-pitch.test';
 import { runCricbuzzApiTests } from './cricbuzz-api.test';
 import { runThemeTests } from './theme.test';
+import { runKeyboardShortcutTests } from './keyboard-shortcuts.test';
 
 async function main() {
   console.log('\n===============================================================');
@@ -38,6 +39,7 @@ async function main() {
   await runCategory('Three.js 3D Pitch & PCFShadowMap Compliance', runThreeJsPitchTests);
   await runCategory('Cricbuzz Live API & Fallback Contracts', runCricbuzzApiTests);
   await runCategory('Theme System & LocalStorage Persistence', runThemeTests);
+  await runCategory('Global Keyboard Navigation & Tab Shortcuts', runKeyboardShortcutTests);
 
   const totalDuration = (performance.now() - suiteStart).toFixed(2);
   console.log('\n===============================================================');

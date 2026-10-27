@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Volume2, VolumeX, Terminal, LogIn, LogOut, Palette } from 'lucide-react';
+import { Volume2, VolumeX, Terminal, LogIn, LogOut, Palette, Keyboard } from 'lucide-react';
 import { sounds } from '../utils/audio';
 import { auth, signInWithGoogle, logOut, subscribeToAuth } from '../services/firebase';
 import { User } from 'firebase/auth';
@@ -10,6 +10,7 @@ interface HeaderProps {
   setActiveTab: (tab: string) => void;
   isMuted: boolean;
   setIsMuted: (muted: boolean) => void;
+  onOpenShortcuts?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -17,6 +18,7 @@ export const Header: React.FC<HeaderProps> = ({
   setActiveTab,
   isMuted,
   setIsMuted,
+  onOpenShortcuts,
 }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(auth.currentUser);
   const [isSigningIn, setIsSigningIn] = useState(false);
@@ -160,6 +162,22 @@ export const Header: React.FC<HeaderProps> = ({
               ) : (
                 <Volume2 className="w-4 h-4 text-emerald-500" />
               )}
+            </button>
+
+            {/* Keyboard Shortcuts Trigger */}
+            <button
+              onClick={() => {
+                onOpenShortcuts?.();
+                sounds.playClick();
+              }}
+              title="Keyboard Shortcuts (Press '?' anytime)"
+              aria-label="Open keyboard shortcuts cheat sheet"
+              className="px-2 py-1.5 rounded-md bg-slate-900 hover:bg-slate-850 text-slate-300 hover:text-white border border-slate-800 transition text-xs font-medium flex items-center gap-1.5 shadow-sm"
+            >
+              <Keyboard className="w-3.5 h-3.5 text-emerald-400" />
+              <kbd className="hidden sm:inline-flex text-[10px] font-mono px-1 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                ?
+              </kbd>
             </button>
 
             {/* Auth Profile / Sign In */}
