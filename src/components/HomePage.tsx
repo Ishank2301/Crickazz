@@ -15,6 +15,7 @@ import {
   BookOpen
 } from 'lucide-react';
 import { sounds } from '../utils/audio';
+import { LeaderboardSection } from './LeaderboardSection';
 
 interface HomePageProps {
   onNavigate: (tab: string) => void;
@@ -195,6 +196,9 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
           </div>
         </div>
       </div>
+
+      {/* SQLite Dynamic Aggregate Leaderboards */}
+      <LeaderboardSection onNavigate={onNavigate} />
 
       {/* Business Use Cases Section */}
       <div className="rounded-2xl bg-slate-900 border border-slate-800 p-6 sm:p-8 space-y-6">
