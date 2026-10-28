@@ -4,6 +4,9 @@ import { runThreeJsPitchTests } from './threejs-pitch.test';
 import { runCricbuzzApiTests } from './cricbuzz-api.test';
 import { runThemeTests } from './theme.test';
 import { runKeyboardShortcutTests } from './keyboard-shortcuts.test';
+import { runLeaderboardTests } from './leaderboard.test';
+import { runLiveMatchKpiTests } from './live-match-kpi.test';
+import { runFramerMotionAnimationTests } from './framer-motion-animations.test';
 
 async function main() {
   console.log('\n===============================================================');
@@ -40,6 +43,9 @@ async function main() {
   await runCategory('Cricbuzz Live API & Fallback Contracts', runCricbuzzApiTests);
   await runCategory('Theme System & LocalStorage Persistence', runThemeTests);
   await runCategory('Global Keyboard Navigation & Tab Shortcuts', runKeyboardShortcutTests);
+  await runCategory('SQLite Relational Leaderboard & Aggregations', runLeaderboardTests);
+  await runCategory('Live Match KPIs, Partnerships & Projected Scores', runLiveMatchKpiTests);
+  await runCategory('Framer Motion Animation Variants & Fluid Pacing', runFramerMotionAnimationTests);
 
   const totalDuration = (performance.now() - suiteStart).toFixed(2);
   console.log('\n===============================================================');
