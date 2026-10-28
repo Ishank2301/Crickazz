@@ -286,15 +286,16 @@ export const LeaderboardSection: React.FC<LeaderboardSectionProps> = ({ onNaviga
           </div>
         </div>
 
-        {/* 4 Summary Stat Micro-Cards */}
+        {/* 4 Summary Stat Micro-Cards with Subtle Gradients & Glass-morphism */}
         {summary && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mt-6 pt-6 border-t border-slate-800/80">
-            <div className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800">
-              <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-                <span className="font-medium">Total Runs Logged</span>
-                <Flame className="w-3.5 h-3.5 text-amber-400" />
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mt-6 pt-6 border-t border-white/10">
+            <div className="p-3.5 rounded-2xl bg-gradient-to-br from-amber-950/30 via-slate-900/85 to-slate-950/90 border border-amber-500/30 hover:border-amber-400/50 shadow-md shadow-amber-950/20 backdrop-blur-md relative overflow-hidden transition-all group">
+              <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-amber-400/40 to-transparent" />
+              <div className="flex items-center justify-between text-slate-300 text-xs mb-1">
+                <span className="font-semibold uppercase tracking-wider text-[10px] text-slate-400">Total Runs Logged</span>
+                <Flame className="w-3.5 h-3.5 text-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.5)]" />
               </div>
-              <div className="text-xl sm:text-2xl font-black font-mono text-white">
+              <div className="text-xl sm:text-2xl font-black font-mono text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]">
                 {summary.totalRuns.toLocaleString()}
               </div>
               <div className="text-[11px] text-slate-400 truncate mt-0.5">
@@ -302,12 +303,13 @@ export const LeaderboardSection: React.FC<LeaderboardSectionProps> = ({ onNaviga
               </div>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800">
-              <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-                <span className="font-medium">Total Wickets Taken</span>
-                <Target className="w-3.5 h-3.5 text-sky-400" />
+            <div className="p-3.5 rounded-2xl bg-gradient-to-br from-sky-950/30 via-slate-900/85 to-slate-950/90 border border-sky-500/30 hover:border-sky-400/50 shadow-md shadow-sky-950/20 backdrop-blur-md relative overflow-hidden transition-all group">
+              <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-sky-400/40 to-transparent" />
+              <div className="flex items-center justify-between text-slate-300 text-xs mb-1">
+                <span className="font-semibold uppercase tracking-wider text-[10px] text-slate-400">Total Wickets Taken</span>
+                <Target className="w-3.5 h-3.5 text-sky-400 drop-shadow-[0_0_6px_rgba(56,189,248,0.5)]" />
               </div>
-              <div className="text-xl sm:text-2xl font-black font-mono text-white">
+              <div className="text-xl sm:text-2xl font-black font-mono text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]">
                 {summary.totalWickets}
               </div>
               <div className="text-[11px] text-slate-400 truncate mt-0.5">
@@ -315,28 +317,30 @@ export const LeaderboardSection: React.FC<LeaderboardSectionProps> = ({ onNaviga
               </div>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800">
-              <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-                <span className="font-medium">Boundary Fireworks</span>
-                <Zap className="w-3.5 h-3.5 text-emerald-400" />
+            <div className="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-950/30 via-slate-900/85 to-slate-950/90 border border-emerald-500/30 hover:border-emerald-400/50 shadow-md shadow-emerald-950/20 backdrop-blur-md relative overflow-hidden transition-all group">
+              <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-emerald-400/40 to-transparent" />
+              <div className="flex items-center justify-between text-slate-300 text-xs mb-1">
+                <span className="font-semibold uppercase tracking-wider text-[10px] text-slate-400">Boundary Fireworks</span>
+                <Zap className="w-3.5 h-3.5 text-emerald-400 drop-shadow-[0_0_6px_rgba(16,185,129,0.5)]" />
               </div>
-              <div className="text-xl sm:text-2xl font-black font-mono text-white">
+              <div className="text-xl sm:text-2xl font-black font-mono text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]">
                 {summary.totalSixes} <span className="text-xs font-sans text-slate-400 font-normal">sixes</span> / {summary.totalFours} <span className="text-xs font-sans text-slate-400 font-normal">fours</span>
               </div>
-              <div className="text-[11px] text-emerald-400 truncate mt-0.5">
+              <div className="text-[11px] text-emerald-400 font-medium truncate mt-0.5">
                 {Math.round(((summary.totalSixes * 6 + summary.totalFours * 4) / summary.totalRuns) * 100)}% runs via boundaries
               </div>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800">
-              <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-                <span className="font-medium">Active Database Roster</span>
-                <Layers className="w-3.5 h-3.5 text-purple-400" />
+            <div className="p-3.5 rounded-2xl bg-gradient-to-br from-purple-950/30 via-slate-900/85 to-slate-950/90 border border-purple-500/30 hover:border-purple-400/50 shadow-md shadow-purple-950/20 backdrop-blur-md relative overflow-hidden transition-all group">
+              <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-purple-400/40 to-transparent" />
+              <div className="flex items-center justify-between text-slate-300 text-xs mb-1">
+                <span className="font-semibold uppercase tracking-wider text-[10px] text-slate-400">Active Database Roster</span>
+                <Layers className="w-3.5 h-3.5 text-purple-400 drop-shadow-[0_0_6px_rgba(168,85,247,0.5)]" />
               </div>
-              <div className="text-xl sm:text-2xl font-black font-mono text-white">
+              <div className="text-xl sm:text-2xl font-black font-mono text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]">
                 {summary.totalPlayers} <span className="text-xs font-sans text-slate-400 font-normal">athletes</span>
               </div>
-              <div className="text-[11px] text-purple-400 truncate mt-0.5">
+              <div className="text-[11px] text-purple-400 font-medium truncate mt-0.5">
                 Highest Innings: {summary.highestScore}
               </div>
             </div>
