@@ -17,6 +17,8 @@ import {
   Sparkles
 } from 'lucide-react';
 import { sounds } from '../utils/audio';
+import { motion, AnimatePresence } from 'framer-motion';
+import { cardEntryVariants, scoreUpdateVariants, commentaryItemVariants } from '../utils/animationVariants';
 
 interface MatchCenterProps {
   match: Match;
@@ -117,7 +119,7 @@ export const MatchCenter: React.FC<MatchCenterProps> = ({
     const nextOverNumber = completedBalls === 5 ? completedOvers + 1 : completedOvers;
 
     // Check if match already reached target or completed
-    const target = match.targetRuns || 206;
+    const target = match.targetRuns || (firstInning ? firstInning.runs + 1 : 206);
     if (currentInning.runs >= target) {
       setIsSimulating(false);
       return;
@@ -279,9 +281,11 @@ export const MatchCenter: React.FC<MatchCenterProps> = ({
     };
 
     // Recalculate target, run rates & dynamic win probability
-    const ballsRemaining = Math.max(0, (20 * 6) - (completedOvers * 6 + completedBalls + 1));
+    const totalMatchBalls = (currentInning.maxOvers || 20) * 6;
+    const ballsRemaining = Math.max(0, totalMatchBalls - (completedOvers * 6 + completedBalls + 1));
     const runsRemaining = Math.max(0, target - totalRuns);
-    const crr = Number(((totalRuns / (completedOvers + (completedBalls + 1) / 6))).toFixed(2));
+    const totalOversDecimal = completedOvers + (completedBalls + 1) / 6;
+    const crr = totalOversDecimal > 0 ? Number((totalRuns / totalOversDecimal).toFixed(2)) : 0;
     const rrr = ballsRemaining > 0 ? Number(((runsRemaining / ballsRemaining) * 6).toFixed(2)) : 0;
 
     // Win probability algorithm based on chase state
@@ -394,11 +398,17 @@ export const MatchCenter: React.FC<MatchCenterProps> = ({
         {/* Big Teams Score Display */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-6 items-center">
           {/* Team A */}
-          <div className={`p-4 rounded-xl border transition ${
-            match.currentInningIndex === 1
-              ? 'bg-slate-800/60 border-emerald-500/50 shadow-md'
-              : 'bg-slate-950/40 border-slate-800'
-          }`}>
+          <motion.div 
+            variants={cardEntryVariants}
+            initial="hidden"
+            animate="visible"
+            whileHover={{ y: -2, transition: { duration: 0.2 } }}
+            className={`p-4 rounded-xl border transition ${
+              match.currentInningIndex === 1
+                ? 'bg-slate-800/60 border-emerald-500/50 shadow-md shadow-emerald-500/10'
+                : 'bg-slate-950/40 border-slate-800'
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="text-3xl sm:text-4xl">{match.teamA.flag}</span>
@@ -410,9 +420,15 @@ export const MatchCenter: React.FC<MatchCenterProps> = ({
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-2xl sm:text-3xl font-extrabold font-mono-numbers text-white">
+                <motion.div 
+                  key={match.teamA.score}
+                  variants={scoreUpdateVariants}
+                  initial="initial"
+                  animate="animate"
+                  className="text-2xl sm:text-3xl font-extrabold font-mono-numbers text-white"
+                >
                   {match.teamA.score || 'Yet to bat'}
-                </div>
+                </motion.div>
                 {match.teamA.overs && (
                   <div className="text-xs text-slate-400 font-mono-numbers">
                     ({match.teamA.overs} Ovs)
@@ -420,14 +436,20 @@ export const MatchCenter: React.FC<MatchCenterProps> = ({
                 )}
               </div>
             </div>
-          </div>
+          </motion.div>
 
           {/* Team B */}
-          <div className={`p-4 rounded-xl border transition ${
-            match.currentInningIndex === 0
-              ? 'bg-slate-800/60 border-emerald-500/50 shadow-md'
-              : 'bg-slate-950/40 border-slate-800'
-          }`}>
+          <motion.div 
+            variants={cardEntryVariants}
+            initial="hidden"
+            animate="visible"
+            whileHover={{ y: -2, transition: { duration: 0.2 } }}
+            className={`p-4 rounded-xl border transition ${
+              match.currentInningIndex === 0
+                ? 'bg-slate-800/60 border-emerald-500/50 shadow-md shadow-emerald-500/10'
+                : 'bg-slate-950/40 border-slate-800'
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="text-3xl sm:text-4xl">{match.teamB.flag}</span>
@@ -439,9 +461,15 @@ export const MatchCenter: React.FC<MatchCenterProps> = ({
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-2xl sm:text-3xl font-extrabold font-mono-numbers text-white">
+                <motion.div 
+                  key={match.teamB.score}
+                  variants={scoreUpdateVariants}
+                  initial="initial"
+                  animate="animate"
+                  className="text-2xl sm:text-3xl font-extrabold font-mono-numbers text-white"
+                >
                   {match.teamB.score || 'Yet to bat'}
-                </div>
+                </motion.div>
                 {match.teamB.overs && (
                   <div className="text-xs text-slate-400 font-mono-numbers">
                     ({match.teamB.overs} Ovs)
@@ -449,7 +477,7 @@ export const MatchCenter: React.FC<MatchCenterProps> = ({
                 )}
               </div>
             </div>
-          </div>
+          </motion.div>
         </div>
 
         {/* Live Equation & Run Rates */}
@@ -669,8 +697,12 @@ export const MatchCenter: React.FC<MatchCenterProps> = ({
               </div>
             ) : (
               filteredCommentary.map((c) => (
-                <div
+                <motion.div
                   key={c.id}
+                  variants={commentaryItemVariants}
+                  initial="initial"
+                  animate="animate"
+                  layout
                   className={`p-4 rounded-xl border transition ${
                     c.isSix
                       ? 'bg-purple-950/20 border-purple-500/40'
@@ -710,7 +742,7 @@ export const MatchCenter: React.FC<MatchCenterProps> = ({
                   <p className="mt-2 text-sm text-slate-200 leading-relaxed">
                     {c.commentary}
                   </p>
-                </div>
+                </motion.div>
               ))
             )}
           </div>
