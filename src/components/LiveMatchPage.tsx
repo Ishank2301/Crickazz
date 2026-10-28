@@ -3,7 +3,10 @@ import { Match } from '../types/cricket';
 import { INITIAL_MATCHES } from '../data/mockCricketData';
 import { MatchCenter } from './MatchCenter';
 import { MatchList } from './MatchList';
+import { LiveMatchKpiSummaryCard } from './LiveMatchKpiSummaryCard';
 import { getCricbuzzKey, saveCricbuzzKey, fetchLiveMatchesFromCricbuzz } from '../services/cricbuzzApi';
+import { motion, AnimatePresence } from 'framer-motion';
+import { tabTransitionVariants } from '../utils/animationVariants';
 import { 
   Activity, 
   Key, 
@@ -121,23 +124,45 @@ export const LiveMatchPage: React.FC<LiveMatchPageProps> = ({
         </div>
       </div>
 
-      {/* Main View Area */}
-      {viewMode === 'match-center' ? (
-        <MatchCenter
-          match={activeMatch}
-          onUpdateMatch={onUpdateMatch}
-          onResetMatch={onResetMatch}
-        />
-      ) : (
-        <MatchList
-          matches={matches}
-          onSelectMatch={(id) => {
-            onSelectMatch(id);
-            setViewMode('match-center');
-          }}
-          searchQuery=""
-        />
-      )}
+      {/* Main View Area with Framer Motion transitions */}
+      <AnimatePresence mode="wait">
+        {viewMode === 'match-center' ? (
+          <motion.div
+            key="match-center"
+            variants={tabTransitionVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="space-y-6"
+          >
+            {/* Executive Live KPI Summary Card (Run Rate, Partnership, Projected Scores & Customizer) */}
+            <LiveMatchKpiSummaryCard match={activeMatch} />
+
+            <MatchCenter
+              match={activeMatch}
+              onUpdateMatch={onUpdateMatch}
+              onResetMatch={onResetMatch}
+            />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="all-matches"
+            variants={tabTransitionVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+          >
+            <MatchList
+              matches={matches}
+              onSelectMatch={(id) => {
+                onSelectMatch(id);
+                setViewMode('match-center');
+              }}
+              searchQuery=""
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Modal: Cricbuzz API Configuration */}
       {isApiModalOpen && (
